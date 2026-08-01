@@ -242,8 +242,8 @@
 
   <div id="content">
     <div class="placeholder">
-      <div class="big">Данные ещё не загружены</div>
-      <div>Вставь ссылку на веб-сервис выше и нажми «Подключить»</div>
+      <div class="big">Загрузка данных…</div>
+      <div>Идёт запрос к веб-сервису Apps Script. Если долго не отвечает — нажми «Обновить».</div>
     </div>
   </div>
 </div>
@@ -566,8 +566,12 @@ function activateTab(tab){
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+tab));
 }
 
+function hasDeepLinkIntent(link){
+  return !!(link && (link.period || link.trainer || link.month || link.tab));
+}
+
 function applyPendingDeepLink(){
-  if(deepLinkApplied || !pendingDeepLink || !dashboardData) return;
+  if(deepLinkApplied || !hasDeepLinkIntent(pendingDeepLink) || !dashboardData) return;
   const link = pendingDeepLink;
   deepLinkApplied = true;
   if(link.period){
@@ -614,23 +618,33 @@ function renderAll(){
   renderMonthsTab(viewData);
   activateTab(activeTab);
   initTabsOnce();
-  if(!deepLinkApplied && pendingDeepLink) applyPendingDeepLink();
+  if(!deepLinkApplied && hasDeepLinkIntent(pendingDeepLink)) applyPendingDeepLink();
   else syncUrl({ period: periodMonth, tab: activeTab });
 }
 
 async function fetchData(url){
   setStatus('', 'Загрузка...');
+  el('dataUpdatedLabel').textContent = 'Данные API: загрузка…';
   try{
     const res = await fetch(url, {cache:'no-store'});
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data = await res.json();
+    if(!data || !data.totals) throw new Error('Некорректный JSON API');
     dashboardData = data;
-    renderAll();
+    try{
+      renderAll();
+    }catch(renderErr){
+      console.error('renderAll failed', renderErr);
+      throw new Error('Данные получены, но отрисовка упала: ' + (renderErr && renderErr.message ? renderErr.message : renderErr));
+    }
     setStatus('live', 'Обновлено в ' + new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}));
   }catch(err){
+    console.error('fetchData failed', err);
     setStatus('error', 'Ошибка подключения');
+    el('dataUpdatedLabel').textContent = 'Данные API: ошибка';
+    el('config').style.display = '';
     if(!dashboardData){
-      el('content').innerHTML = '<div class="placeholder"><div class="big">Не удалось получить данные</div><div>Проверь ссылку и настройки доступа веб-приложения</div></div>';
+      el('content').innerHTML = '<div class="placeholder"><div class="big">Не удалось получить данные</div><div>Проверь ссылку `/exec`, доступ веб-приложения и консоль браузера (F12).</div><div style="margin-top:8px;color:var(--text-muted);font-size:12px;">'+String(err && err.message ? err.message : err)+'</div></div>';
     }
   }
 }
@@ -795,7 +809,7 @@ function renderFunnelInto(elId, funnel){
 
 function renderTrendChart(canvasId, months){
   destroyChart(canvasId);
-  const ctx = document.getElementById(canvasId); if(!ctx) return;
+  const ctx = document.getElementById(canvasId); if(!ctx || typeof Chart==='undefined') return;
   charts[canvasId] = new Chart(ctx, {
     type:'line',
     data:{ labels: months.map(m=>m.month), datasets:[{ label:'Конверсия 1→5', data: months.map(m=>m.conv1to5), borderColor:'#4457E8', backgroundColor:'rgba(68,87,232,0.08)', fill:true, tension:.3, pointRadius:4, pointBackgroundColor:'#4457E8' }] },
@@ -804,7 +818,7 @@ function renderTrendChart(canvasId, months){
 }
 function renderPieChart(canvasId, t){
   destroyChart(canvasId);
-  const ctx = document.getElementById(canvasId); if(!ctx) return;
+  const ctx = document.getElementById(canvasId); if(!ctx || typeof Chart==='undefined') return;
   charts[canvasId] = new Chart(ctx, {
     type:'doughnut',
     data:{ labels:['Ушли сами','Отказали мы','Перенесли'], datasets:[{ data:[t.leftSelf,t.refused,t.transferred], backgroundColor:['#C7304C','#B7791F','#4457E8'], borderColor:'#FFFFFF', borderWidth:3 }] },
@@ -924,7 +938,7 @@ function openTrainerDetail(name, opts={}){
   renderFunnelInto('trainerFunnel', funnel);
   destroyChart('trainerTrendChart');
   const ctx = document.getElementById('trainerTrendChart');
-  charts['trainerTrendChart'] = new Chart(ctx, {
+  if(ctx && typeof Chart!=='undefined') charts['trainerTrendChart'] = new Chart(ctx, {
     type:'bar',
     data:{ labels: monthTrend.map(m=>m.month), datasets:[{ label:'Конверсия 1→5', data: monthTrend.map(m=>m.conv1to5), backgroundColor:'#4457E8', borderRadius:5 }] },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{ticks:{color:'#8E96A3', callback:v=>v+'%'}, grid:{color:'#EDEFF2'}}, x:{ticks:{color:'#8E96A3'}, grid:{display:false}} } }
