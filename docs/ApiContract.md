@@ -6,6 +6,8 @@
 - Content-Type: `application/json`
 - Auth: нет (публичный URL)
 - **schemaVersion:** `2` (текущий)
+- Кэш: Script Cache на 300с; `?refresh=1` принудительно пересчитывает
+- В ответе опционально `cache: { hit: boolean, ttlSec: number }`
 
 Текущий deployment ID (URL `/exec`):  
 `AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNjs7MKzbt9Fw`

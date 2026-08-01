@@ -315,6 +315,7 @@
 
 <script>
 const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNjs7MKzbt9Fw/exec';
+const LOCAL_CACHE_KEY = 'trainingDashboard:lastPayload:v2';
 
 let dashboardData = null;
 let viewData = null;
@@ -352,9 +353,12 @@ function startAutoRefresh(url){
   const next = getNextRefreshTime();
   updateNextRefreshLabel(next);
   refreshTimeout = setTimeout(() => {
-    fetchData(url);
+    fetchData(url, { forceRefresh: true, background: true });
     updateNextRefreshLabel(getNextRefreshTime());
-    refreshInterval = setInterval(() => { fetchData(url); updateNextRefreshLabel(getNextRefreshTime()); }, DAY_MS);
+    refreshInterval = setInterval(() => {
+      fetchData(url, { forceRefresh: true, background: true });
+      updateNextRefreshLabel(getNextRefreshTime());
+    }, DAY_MS);
   }, next.getTime() - Date.now());
 }
 
@@ -711,39 +715,95 @@ function renderAll(){
   else syncUrl({ period: periodMonth, tab: activeTab });
 }
 
-async function fetchData(url){
-  setStatus('', 'Загрузка...');
-  el('dataUpdatedLabel').textContent = 'Данные API: загрузка…';
+function apiUrl(base, forceRefresh){
+  const u = new URL(base, location.href);
+  if(forceRefresh) u.searchParams.set('refresh', '1');
+  else u.searchParams.delete('refresh');
+  // анти-кэш браузера на сам запрос
+  u.searchParams.set('_', String(Date.now()));
+  return u.toString();
+}
+
+function loadLocalCache(){
   try{
-    const res = await fetch(url, {cache:'no-store'});
+    const raw = localStorage.getItem(LOCAL_CACHE_KEY);
+    if(!raw) return null;
+    const data = JSON.parse(raw);
+    if(!data || !data.totals) return null;
+    return data;
+  }catch(_){
+    return null;
+  }
+}
+
+function saveLocalCache(data){
+  try{
+    localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(data));
+  }catch(_){
+    // quota / private mode — игнорируем
+  }
+}
+
+function showCachedThenRefresh(baseUrl){
+  const cached = loadLocalCache();
+  if(cached){
+    dashboardData = cached;
+    try{
+      renderAll();
+      setStatus('live', 'Кэш · обновляю…');
+      el('dataUpdatedLabel').textContent = formatDataUpdated(cached.updatedAt) + ' · показан локальный кэш';
+    }catch(err){
+      console.error('cached render failed', err);
+    }
+  }
+  return fetchData(baseUrl, { forceRefresh: false, background: !!cached });
+}
+
+async function fetchData(url, opts={}){
+  const forceRefresh = !!opts.forceRefresh;
+  const background = !!opts.background;
+  if(!background){
+    setStatus('', 'Загрузка...');
+    el('dataUpdatedLabel').textContent = 'Данные API: загрузка…';
+  }else{
+    setStatus('live', 'Кэш · обновляю…');
+  }
+  try{
+    const res = await fetch(apiUrl(url, forceRefresh), {cache:'no-store'});
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data = await res.json();
     if(!data || !data.totals) throw new Error('Некорректный JSON API');
     dashboardData = data;
+    saveLocalCache(data);
     try{
       renderAll();
     }catch(renderErr){
       console.error('renderAll failed', renderErr);
       throw new Error('Данные получены, но отрисовка упала: ' + (renderErr && renderErr.message ? renderErr.message : renderErr));
     }
+    const cacheNote = data.cache && data.cache.hit ? ' · серверный кэш' : ' · свежий расчёт';
     setStatus('live', 'Обновлено в ' + new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}));
+    el('dataUpdatedLabel').textContent = formatDataUpdated(data.updatedAt) + cacheNote;
   }catch(err){
     console.error('fetchData failed', err);
+    if(dashboardData){
+      setStatus('live', 'Кэш · нет сети/API');
+      el('dataUpdatedLabel').textContent = formatDataUpdated(dashboardData.updatedAt) + ' · не удалось обновить';
+      return;
+    }
     setStatus('error', 'Ошибка подключения');
     el('dataUpdatedLabel').textContent = 'Данные API: ошибка';
     el('config').style.display = '';
-    if(!dashboardData){
-      el('content').innerHTML = '<div class="placeholder"><div class="big">Не удалось получить данные</div><div>Проверь ссылку `/exec`, доступ веб-приложения и консоль браузера (F12).</div><div style="margin-top:8px;color:var(--text-muted);font-size:12px;">'+String(err && err.message ? err.message : err)+'</div></div>';
-    }
+    el('content').innerHTML = '<div class="placeholder"><div class="big">Не удалось получить данные</div><div>Проверь ссылку `/exec`, доступ веб-приложения и консоль браузера (F12).</div><div style="margin-top:8px;color:var(--text-muted);font-size:12px;">'+String(err && err.message ? err.message : err)+'</div></div>';
   }
 }
 
 el('connectBtn').addEventListener('click', () => {
   const url = el('urlInput').value.trim(); if(!url) return;
-  fetchData(url); startAutoRefresh(url);
+  showCachedThenRefresh(url); startAutoRefresh(url);
 });
 el('refreshBtn').addEventListener('click', () => {
-  const url = el('urlInput').value.trim(); if(url) fetchData(url);
+  const url = el('urlInput').value.trim(); if(url) fetchData(url, { forceRefresh: true });
 });
 el('exportCsvBtn').addEventListener('click', exportActiveTabCsv);
 el('periodSelect').addEventListener('change', () => {
@@ -757,7 +817,7 @@ if(pendingDeepLink.period) periodMonth = pendingDeepLink.period;
 if(DEFAULT_APPS_SCRIPT_URL){
   el('urlInput').value = DEFAULT_APPS_SCRIPT_URL;
   el('config').style.display = 'none';
-  fetchData(DEFAULT_APPS_SCRIPT_URL);
+  showCachedThenRefresh(DEFAULT_APPS_SCRIPT_URL);
   startAutoRefresh(DEFAULT_APPS_SCRIPT_URL);
 }
 

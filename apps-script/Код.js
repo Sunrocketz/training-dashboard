@@ -37,6 +37,8 @@ var DASHBOARD_SHEET_NAME = 'Дашборд';               // название �
 var DATA_START_ROW = 1;   // с какой строки начинать чтение
 var DATA_END_ROW = 500;   // до какой строки читать (с запасом)
 var LAST_COLUMN = 'R';    // последняя колонка с данными
+var API_CACHE_KEY = 'dashboard_json_v2';
+var API_CACHE_TTL_SEC = 300; // 5 минут — повторные открытия дашборда без пересчёта листа
 // =================================================================
 
 var COL = {
@@ -63,7 +65,9 @@ function collectDashboardData() {
     throw new Error('Не найден лист "' + SOURCE_SHEET_NAME + '"');
   }
 
-  var range = sourceSheet.getRange('A' + DATA_START_ROW + ':' + LAST_COLUMN + DATA_END_ROW);
+  var lastRow = Math.max(sourceSheet.getLastRow(), DATA_START_ROW);
+  var endRow = Math.min(lastRow, DATA_END_ROW);
+  var range = sourceSheet.getRange('A' + DATA_START_ROW + ':' + LAST_COLUMN + endRow);
   var values = range.getValues();
 
   var validGroups = [];
@@ -314,10 +318,38 @@ function buildDashboard() {
 // ЧАСТЬ 3: веб-сервис — публикует ТОЛЬКО агрегаты как JSON
 // ======================================================
 function doGet(e) {
+  e = e || {};
+  var params = e.parameter || {};
+  var forceRefresh = String(params.refresh || '') === '1' || String(params.refresh || '') === 'true';
+  var cache = CacheService.getScriptCache();
+
+  if (!forceRefresh) {
+    var cached = cache.get(API_CACHE_KEY);
+    if (cached) {
+      try {
+        var cachedData = JSON.parse(cached);
+        cachedData.cache = { hit: true, ttlSec: API_CACHE_TTL_SEC };
+        return ContentService
+          .createTextOutput(JSON.stringify(cachedData))
+          .setMimeType(ContentService.MimeType.JSON);
+      } catch (ignoreParse) {
+        // битый кэш — пересчитаем
+      }
+    }
+  }
+
   var data = collectDashboardData();
-  var output = ContentService.createTextOutput(JSON.stringify(data));
-  output.setMimeType(ContentService.MimeType.JSON);
-  return output;
+  data.cache = { hit: false, ttlSec: API_CACHE_TTL_SEC };
+  var json = JSON.stringify(data);
+  try {
+    // Script Cache ~100KB/ключ; наш payload сейчас заметно меньше
+    cache.put(API_CACHE_KEY, json, API_CACHE_TTL_SEC);
+  } catch (ignorePut) {
+    // если не влезло — просто отдаём без кэша
+  }
+  return ContentService
+    .createTextOutput(json)
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // ======== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ========
