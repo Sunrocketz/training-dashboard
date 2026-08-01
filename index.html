@@ -21,39 +21,47 @@
     --font-body:'Inter', sans-serif;
     --font-mono:'JetBrains Mono', monospace;
     --shadow:0 1px 2px rgba(20,24,34,.04), 0 1px 1px rgba(20,24,34,.03);
+    /* иерархия: hero → title → body → meta → overline */
+    --fs-hero:30px; --fs-title:18px; --fs-kpi:28px; --fs-body:14px; --fs-meta:12px; --fs-overline:11px;
+    --lh-tight:1.2; --lh-body:1.45;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   body{
     background:var(--bg); color:var(--text-primary); font-family:var(--font-body);
+    font-size:var(--fs-body); line-height:var(--lh-body);
     min-height:100vh; padding:32px 24px 80px;
   }
   .wrap{max-width:1220px; margin:0 auto;}
 
   header{
     display:flex; justify-content:space-between; align-items:flex-start;
-    margin-bottom:22px; gap:24px; flex-wrap:wrap;
+    margin-bottom:20px; gap:24px; flex-wrap:wrap;
   }
   .title-block h1{
-    font-family:var(--font-display); font-weight:600; font-size:26px; letter-spacing:-0.01em;
+    font-family:var(--font-display); font-weight:700; font-size:var(--fs-hero);
+    letter-spacing:-0.02em; line-height:var(--lh-tight);
   }
-  .title-block p{color:var(--text-secondary); font-size:14px; margin-top:4px;}
+  .title-block p{
+    color:var(--text-secondary); font-size:var(--fs-body); margin-top:6px; max-width:520px;
+  }
   .status-block{display:flex; flex-direction:column; align-items:flex-end; gap:8px;}
   .status-actions{display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end;}
   .status-pill{
-    display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-secondary);
+    display:flex; align-items:center; gap:8px; font-size:var(--fs-meta); font-weight:500;
+    color:var(--text-secondary);
     background:var(--surface); border:1px solid var(--border); border-radius:100px;
     padding:6px 14px; box-shadow:var(--shadow);
   }
   .data-updated{
-    font-size:12px; color:var(--text-muted); text-align:right; max-width:280px;
+    font-size:var(--fs-meta); color:var(--text-muted); text-align:right; max-width:300px; line-height:1.35;
   }
   .dot{width:7px; height:7px; border-radius:50%; background:var(--text-muted); flex-shrink:0;}
   .dot.live{background:var(--success); box-shadow:0 0 0 3px var(--success-soft);}
   .dot.error{background:var(--danger); box-shadow:0 0 0 3px var(--danger-soft);}
   .btn{
-    font-family:var(--font-body); font-size:13px; font-weight:500; color:var(--text-primary);
+    font-family:var(--font-body); font-size:var(--fs-meta); font-weight:600; color:var(--text-primary);
     background:var(--surface); border:1px solid var(--border); border-radius:8px;
-    padding:7px 14px; cursor:pointer; transition:background .15s, border-color .15s;
+    padding:8px 14px; cursor:pointer; transition:background .15s, border-color .15s;
   }
   .btn:hover{background:var(--surface-2);}
   .btn.primary{background:var(--accent); border-color:var(--accent); color:#fff;}
@@ -75,7 +83,7 @@
   /* ---- tabs ---- */
   .tabs{display:flex; gap:4px; margin-bottom:20px; background:var(--surface-2); border-radius:10px; padding:4px; width:fit-content;}
   .tab-btn{
-    font-family:var(--font-body); font-size:13px; font-weight:500; color:var(--text-secondary);
+    font-family:var(--font-body); font-size:var(--fs-meta); font-weight:600; color:var(--text-secondary);
     background:transparent; border:none; border-radius:7px; padding:8px 16px; cursor:pointer;
     transition:all .15s;
   }
@@ -83,23 +91,66 @@
   .tab-panel{display:none;}
   .tab-panel.active{display:block;}
 
+  .context-banner{
+    display:flex; flex-wrap:wrap; gap:10px 16px; align-items:flex-start; justify-content:space-between;
+    background:linear-gradient(180deg, #FFFFFF 0%, var(--accent-soft) 140%);
+    border:1px solid #D8DFFB; border-radius:14px; padding:14px 18px; margin-bottom:16px;
+  }
+  .context-banner .eyebrow{
+    font-size:var(--fs-overline); font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--accent-dark); margin-bottom:4px;
+  }
+  .context-banner .headline{
+    font-family:var(--font-display); font-size:var(--fs-title); font-weight:700;
+    letter-spacing:-0.015em; line-height:var(--lh-tight); color:var(--text-primary);
+  }
+  .context-banner .support{
+    margin-top:4px; font-size:var(--fs-meta); color:var(--text-secondary); max-width:720px; line-height:1.4;
+  }
+  .context-banner .side-note{
+    font-size:var(--fs-meta); color:var(--text-muted); max-width:260px; text-align:right; line-height:1.4;
+  }
+
   .kpi-grid{display:grid; grid-template-columns:repeat(5, 1fr); gap:12px; margin-bottom:20px;}
-  .kpi-card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; box-shadow:var(--shadow);}
-  .kpi-card .label{font-size:12px; color:var(--text-secondary); margin-bottom:8px;}
-  .kpi-card .value{font-family:var(--font-display); font-size:26px; font-weight:600; letter-spacing:-0.01em;}
-  .kpi-card .sub{font-size:12px; margin-top:4px; color:var(--text-muted);}
+  .kpi-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    padding:14px 16px 12px; box-shadow:var(--shadow);
+    display:flex; flex-direction:column; gap:2px; min-height:148px;
+  }
+  .kpi-card .scope{
+    font-size:var(--fs-overline); font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+    color:var(--text-muted); margin-bottom:2px;
+  }
+  .kpi-card .label{
+    font-size:var(--fs-meta); font-weight:600; color:var(--text-secondary);
+    margin-bottom:6px; line-height:1.3;
+  }
+  .kpi-card .value{
+    font-family:var(--font-display); font-size:var(--fs-kpi); font-weight:700;
+    letter-spacing:-0.02em; line-height:1.1; color:var(--text-primary);
+  }
+  .kpi-card .sub{font-size:var(--fs-meta); margin-top:4px; color:var(--text-muted); line-height:1.35;}
   .kpi-card.accent .value{color:var(--accent);}
   .kpi-card.success .value{color:var(--success);}
   .kpi-card.danger .value{color:var(--danger);}
+  .kpi-card .delta{
+    margin-top:auto; padding-top:8px; border-top:1px solid var(--border-soft);
+    font-size:11px; font-family:var(--font-body); font-weight:600; line-height:1.35;
+  }
+  .kpi-card .delta .delta-main{font-family:var(--font-mono); font-size:12px;}
+  .kpi-card .delta .delta-note{display:block; font-weight:500; color:var(--text-muted); margin-top:2px;}
 
   .section{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:22px 24px; margin-bottom:16px; box-shadow:var(--shadow);}
-  .section-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:10px;}
-  .section-head h2{font-family:var(--font-display); font-size:16px; font-weight:600;}
-  .section-head .desc{font-size:12px; color:var(--text-muted);}
+  .section-head{display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:16px; flex-wrap:wrap; gap:10px;}
+  .section-head h2{
+    font-family:var(--font-display); font-size:var(--fs-title); font-weight:700;
+    letter-spacing:-0.015em; line-height:var(--lh-tight);
+  }
+  .section-head .desc{font-size:var(--fs-meta); color:var(--text-muted); max-width:420px; text-align:right; line-height:1.35;}
 
   .funnel{display:flex; flex-direction:column; gap:10px;}
   .funnel-row{display:flex; align-items:center; gap:14px;}
-  .funnel-label{width:150px; font-size:13px; color:var(--text-secondary); flex-shrink:0;}
+  .funnel-label{width:150px; font-size:var(--fs-meta); font-weight:600; color:var(--text-secondary); flex-shrink:0;}
   .funnel-track{flex:1; height:34px; background:var(--surface-2); border-radius:8px; overflow:hidden;}
   .funnel-fill{
     height:100%; background:linear-gradient(90deg, var(--accent), #7C93FF);
@@ -149,10 +200,11 @@
   .mini-kpi-grid.cols-3{grid-template-columns:repeat(3,1fr);}
   .detail-actions{display:flex; gap:8px; align-items:center;}
   .mini-kpi{background:var(--surface-2); border-radius:10px; padding:12px 14px;}
-  .mini-kpi .label{font-size:11px; color:var(--text-muted);}
-  .mini-kpi .value{font-family:var(--font-display); font-size:19px; font-weight:600; margin-top:2px;}
-  .compare-row{display:flex; align-items:center; gap:8px; font-size:12px; margin-top:2px;}
+  .mini-kpi .label{font-size:var(--fs-overline); font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--text-muted);}
+  .mini-kpi .value{font-family:var(--font-display); font-size:22px; font-weight:700; margin-top:4px; letter-spacing:-0.02em;}
+  .compare-row{display:flex; align-items:center; gap:8px; font-size:var(--fs-meta); font-weight:600; margin-top:4px;}
   .compare-row.up{color:var(--success);} .compare-row.down{color:var(--danger);}
+  .detail-head h2{font-size:22px; font-weight:700; letter-spacing:-0.02em;}
 
   /* ---- month cards ---- */
   .month-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:14px;}
@@ -171,21 +223,30 @@
     border-radius:12px; box-shadow:var(--shadow);
   }
   .toolbar-left, .toolbar-right{display:flex; flex-wrap:wrap; gap:10px; align-items:center;}
-  .toolbar label{font-size:13px; color:var(--text-secondary);}
   .toolbar select{
     background:var(--surface-2); border:1px solid var(--border); border-radius:8px;
     color:var(--text-primary); font-size:13px; padding:8px 12px; min-width:180px;
   }
   .toolbar select:focus{outline:none; border-color:var(--accent);}
-  .legend-bar{display:flex; flex-wrap:wrap; gap:10px 14px; align-items:center; font-size:12px; color:var(--text-secondary);}
-  .kpi-card .delta{font-size:12px; margin-top:6px; font-family:var(--font-mono);}
-  .kpi-card .delta.up{color:var(--success);}
-  .kpi-card .delta.down{color:var(--danger);}
-  .kpi-card .delta.flat{color:var(--text-muted);}
-  .dropout-table{width:100%; border-collapse:collapse; font-size:13px;}
-  .dropout-table th{text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--text-muted); font-weight:500; padding:0 10px 10px;}
+  .legend-bar{display:flex; flex-wrap:wrap; gap:10px 14px; align-items:center; font-size:var(--fs-meta); color:var(--text-secondary);}
+  .kpi-card .delta.up, .kpi-card .delta.up .delta-main{color:var(--success);}
+  .kpi-card .delta.down, .kpi-card .delta.down .delta-main{color:var(--danger);}
+  .kpi-card .delta.flat, .kpi-card .delta.flat .delta-main{color:var(--text-muted);}
+  .dropout-table{width:100%; border-collapse:collapse; font-size:var(--fs-meta);}
+  .dropout-table th{
+    text-align:left; font-size:var(--fs-overline); text-transform:uppercase; letter-spacing:.05em;
+    color:var(--text-muted); font-weight:700; padding:0 10px 10px;
+  }
   .dropout-table td{padding:10px; border-top:1px solid var(--border-soft); font-family:var(--font-mono);}
-  .dropout-table td:first-child{font-family:var(--font-body); font-weight:500;}
+  .dropout-table td:first-child{font-family:var(--font-body); font-weight:600; color:var(--text-primary);}
+  .footnote{margin-top:10px; font-size:var(--fs-meta); color:var(--text-muted); line-height:1.4;}
+  .rank-row{
+    display:flex; justify-content:space-between; align-items:center; gap:12px;
+    font-size:var(--fs-body); padding:9px 0; border-top:1px solid var(--border-soft);
+  }
+  .rank-row .name{font-weight:600;}
+  .toolbar label{font-size:var(--fs-meta); font-weight:600; color:var(--text-secondary);}
+  #periodHint{font-size:var(--fs-meta); color:var(--text-muted); max-width:420px; line-height:1.35;}
 
   @media (max-width:900px){
     .kpi-grid{grid-template-columns:repeat(2,1fr);}
@@ -441,7 +502,7 @@ function momContext(raw, month){
 
 function deltaHtml(current, previous, opts={}){
   if(previous==null || current==null || Number.isNaN(current) || Number.isNaN(previous)){
-    return `<div class="delta flat">нет базы для сравнения</div>`;
+    return `<div class="delta flat"><span class="delta-main">нет сравнения</span><span class="delta-note">${opts.note || 'нужен предыдущий месяц'}</span></div>`;
   }
   const diff = round1(current - previous);
   const invert = !!opts.invert;
@@ -449,8 +510,36 @@ function deltaHtml(current, previous, opts={}){
   const cls = diff === 0 ? 'flat' : (good ? 'up' : 'down');
   const arrow = diff > 0 ? '▲' : diff < 0 ? '▼' : '•';
   const unit = opts.unit || '';
-  const label = opts.label || '';
-  return `<div class="delta ${cls}">${arrow} ${diff>0?'+':''}${diff}${unit} ${label}</div>`;
+  const note = opts.note || opts.label || '';
+  return `<div class="delta ${cls}"><span class="delta-main">${arrow} ${diff>0?'+':''}${diff}${unit}</span>${note?`<span class="delta-note">${note}</span>`:''}</div>`;
+}
+
+function periodScopeLabel(filtered){
+  return filtered ? `месяц «${periodMonth}»` : 'весь период';
+}
+
+function periodContext(data){
+  const months = dashboardData.byMonth || [];
+  const last = months[months.length-1];
+  const prev = months.length>1 ? months[months.length-2] : null;
+  if(data.periodFiltered){
+    return {
+      eyebrow: 'Область данных',
+      headline: `Статистика за месяц «${periodMonth}»`,
+      support: 'Крупные цифры ниже — только valid-группы выбранного месяца. Стрелки сравнивают этот месяц с предыдущим.',
+      side: prev ? `Сравнение: ${periodMonth} → к ${prev.month}` : 'Предыдущего месяца для сравнения нет',
+      scope: 'Этот месяц',
+      deltaNote: prev ? `к прошлому месяцу (${prev.month})` : 'нет прошлого месяца'
+    };
+  }
+  return {
+    eyebrow: 'Область данных',
+    headline: 'Статистика за весь период',
+    support: 'Крупные цифры — сумма по всем valid-группам с начала учёта. Стрелки ниже — это не ко всей сумме, а изменение последнего месяца к предыдущему.',
+    side: last && prev ? `Стрелки: ${last.month} → к ${prev.month}` : (last ? `Последний месяц: ${last.month}` : 'Мало данных для сравнения'),
+    scope: 'Весь период',
+    deltaNote: last && prev ? `последний месяц (${last.month}) к ${prev.month}` : 'нет базы для сравнения месяцев'
+  };
 }
 
 function fillPeriodSelect(raw){
@@ -609,9 +698,9 @@ function renderAll(){
   el('dataUpdatedLabel').textContent = formatDataUpdated(dashboardData.updatedAt);
   const hint = el('periodHint');
   if(periodMonth){
-    hint.textContent = `Показаны valid-группы за «${periodMonth}». «Не собралась/распалась» в фильтре недоступны.`;
+    hint.textContent = `Сейчас выбран месяц «${periodMonth}»: все вкладки считают только его.`;
   } else {
-    hint.textContent = 'Сравнение KPI — последний месяц к предыдущему.';
+    hint.textContent = 'Сейчас: весь период. Стрелки на KPI = последний месяц к предыдущему, не ко всей сумме.';
   }
   renderOverview(viewData);
   renderTrainersTab(viewData);
@@ -693,40 +782,49 @@ function renderOverview(data){
   const mom = momContext(dashboardData, periodMonth);
   const cur = mom && mom.current ? mom.current : null;
   const prev = mom && mom.prev ? mom.prev : null;
-  const cmpLabel = mom && mom.label ? mom.label : '';
+  const ctx = periodContext(data);
+  const note = ctx.deltaNote;
 
-  // Для режима «все месяцы» KPI — totals всего периода, а дельта — последний месяц vs предыдущий по ключевым метрикам месяца
+  // Крупные цифры = текущая область (весь период или месяц). Стрелки = сравнение месяцев.
   const showMomOnTotals = !data.periodFiltered;
-  const convNow = data.periodFiltered ? t.conv1to5 : (cur && cur.conv1to5!=null ? cur.conv1to5 : t.conv1to5);
-  const groupsDelta = showMomOnTotals && cur && prev ? deltaHtml(cur.groups, prev.groups, {label: cmpLabel})
-    : (!showMomOnTotals && prev ? deltaHtml(t.groups, prev.groups, {label: cmpLabel}) : `<div class="delta flat">${showMomOnTotals?'дельта: последний месяц': 'нет предыдущего месяца'}</div>`);
-  const convDelta = showMomOnTotals && cur && prev ? deltaHtml(cur.conv1to5, prev.conv1to5, {unit:'%', label: cmpLabel})
-    : (!showMomOnTotals && prev ? deltaHtml(t.conv1to5, prev.conv1to5, {unit:'%', label: cmpLabel}) : `<div class="delta flat">—</div>`);
-  const leftDelta = showMomOnTotals && cur && prev ? deltaHtml(cur.leftSelf||0, prev.leftSelf||0, {invert:true, label: cmpLabel})
-    : (!showMomOnTotals && prev ? deltaHtml(t.leftSelf, prev.leftSelf||0, {invert:true, label: cmpLabel}) : `<div class="delta flat">—</div>`);
-  const refusedDelta = showMomOnTotals && cur && prev ? deltaHtml(cur.refused||0, prev.refused||0, {invert:true, label: cmpLabel})
-    : (!showMomOnTotals && prev ? deltaHtml(t.refused, prev.refused||0, {invert:true, label: cmpLabel}) : `<div class="delta flat">—</div>`);
-  const finalDelta = showMomOnTotals && cur && prev ? deltaHtml(cur.finalCount||0, prev.finalCount||0, {label: cmpLabel})
-    : (!showMomOnTotals && prev ? deltaHtml(t.finalCount, prev.finalCount||0, {label: cmpLabel}) : `<div class="delta flat">—</div>`);
+  const groupsDelta = showMomOnTotals && cur && prev ? deltaHtml(cur.groups, prev.groups, {note})
+    : (!showMomOnTotals && prev ? deltaHtml(t.groups, prev.groups, {note}) : deltaHtml(null, null, {note}));
+  const convDelta = showMomOnTotals && cur && prev ? deltaHtml(cur.conv1to5, prev.conv1to5, {unit:'%', note})
+    : (!showMomOnTotals && prev ? deltaHtml(t.conv1to5, prev.conv1to5, {unit:'%', note}) : deltaHtml(null, null, {note}));
+  const leftDelta = showMomOnTotals && cur && prev ? deltaHtml(cur.leftSelf||0, prev.leftSelf||0, {invert:true, note})
+    : (!showMomOnTotals && prev ? deltaHtml(t.leftSelf, prev.leftSelf||0, {invert:true, note}) : deltaHtml(null, null, {note}));
+  const refusedDelta = showMomOnTotals && cur && prev ? deltaHtml(cur.refused||0, prev.refused||0, {invert:true, note})
+    : (!showMomOnTotals && prev ? deltaHtml(t.refused, prev.refused||0, {invert:true, note}) : deltaHtml(null, null, {note}));
+  const finalDelta = showMomOnTotals && cur && prev ? deltaHtml(cur.finalCount||0, prev.finalCount||0, {note})
+    : (!showMomOnTotals && prev ? deltaHtml(t.finalCount, prev.finalCount||0, {note}) : deltaHtml(null, null, {note}));
 
   const notHeld = (t.notGathered!=null && t.fellApart!=null)
-    ? `${t.notGathered+t.fellApart} не состоялось`
-    : 'фильтр по valid-группам';
+    ? `${t.notGathered+t.fellApart} групп не состоялось (не собралась / распалась)`
+    : 'только valid-группы выбранного месяца';
 
+  const scope = ctx.scope;
   let html = `
   <div id="panel-overview" class="tab-panel active">
-    <div class="kpi-grid">
-      <div class="kpi-card"><div class="label">Всего групп</div><div class="value">${t.groups}</div><div class="sub">${notHeld}</div>${groupsDelta}</div>
-      <div class="kpi-card ${t.conv1to5>=m.planConv1to5?'success':'danger'}"><div class="label">Конверсия 1→5 (взвеш.)</div><div class="value">${t.conv1to5}%</div><div class="sub">план ${m.planConv1to5}% · final/day1</div>${convDelta}</div>
-      <div class="kpi-card danger"><div class="label">Ушли сами</div><div class="value">${t.leftSelf}</div><div class="sub">${pct(t.leftSelf,t.day1)}% от вышедших</div>${leftDelta}</div>
-      <div class="kpi-card"><div class="label">Отказали мы</div><div class="value">${t.refused}</div><div class="sub">${pct(t.refused,t.day1)}% от вышедших</div>${refusedDelta}</div>
-      <div class="kpi-card accent"><div class="label">Вышло на линию</div><div class="value">${t.finalCount}</div><div class="sub">из ${t.day1} на 1-й день</div>${finalDelta}</div>
+    <div class="context-banner">
+      <div>
+        <div class="eyebrow">${ctx.eyebrow}</div>
+        <div class="headline">${ctx.headline}</div>
+        <div class="support">${ctx.support}</div>
+      </div>
+      <div class="side-note">${ctx.side}</div>
     </div>
-    <div class="section"><div class="section-head"><h2>Воронка обучения</h2><div class="desc">кол-во учеников на каждом этапе</div></div><div class="funnel" id="funnelOverview"></div></div>
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="scope">${scope}</div><div class="label">Всего групп</div><div class="value">${t.groups}</div><div class="sub">${notHeld}</div>${groupsDelta}</div>
+      <div class="kpi-card ${t.conv1to5>=m.planConv1to5?'success':'danger'}"><div class="scope">${scope}</div><div class="label">Конверсия 1→5 (взвеш.)</div><div class="value">${t.conv1to5}%</div><div class="sub">цель ${m.planConv1to5}% · считаем final ÷ day1</div>${convDelta}</div>
+      <div class="kpi-card danger"><div class="scope">${scope}</div><div class="label">Ушли сами</div><div class="value">${t.leftSelf}</div><div class="sub">${pct(t.leftSelf,t.day1)}% от вышедших на 1-й день</div>${leftDelta}</div>
+      <div class="kpi-card"><div class="scope">${scope}</div><div class="label">Отказали мы</div><div class="value">${t.refused}</div><div class="sub">${pct(t.refused,t.day1)}% от вышедших на 1-й день</div>${refusedDelta}</div>
+      <div class="kpi-card accent"><div class="scope">${scope}</div><div class="label">Вышло на линию</div><div class="value">${t.finalCount}</div><div class="sub">из ${t.day1} человек на 1-м дне</div>${finalDelta}</div>
+    </div>
+    <div class="section"><div class="section-head"><h2>Воронка обучения</h2><div class="desc">Главное: сколько людей на каждом этапе · область: ${periodScopeLabel(data.periodFiltered)}</div></div><div class="funnel" id="funnelOverview"></div></div>
     <div class="two-col">
-      <div class="section"><div class="section-head"><h2>Динамика по месяцам</h2><div class="desc">конверсия 1→5 (взвешенная)</div></div><div style="position:relative;height:220px;"><canvas id="trendChart"></canvas></div></div>
-      <div class="section"><div class="section-head"><h2>Структура отсева</h2><div class="desc">всего ${t.leftSelf+t.refused+t.transferred}</div></div><div style="position:relative;height:220px;"><canvas id="pieChart"></canvas></div>
-        <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:12px;font-size:12px;color:var(--text-secondary);">
+      <div class="section"><div class="section-head"><h2>Динамика по месяцам</h2><div class="desc">Взвешенная конверсия 1→5 по полной истории</div></div><div style="position:relative;height:220px;"><canvas id="trendChart"></canvas></div></div>
+      <div class="section"><div class="section-head"><h2>Структура отсева</h2><div class="desc">В текущей области: ${t.leftSelf+t.refused+t.transferred} человек</div></div><div style="position:relative;height:220px;"><canvas id="pieChart"></canvas></div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:12px;font-size:var(--fs-meta);color:var(--text-secondary);font-weight:600;">
           <span style="display:flex;align-items:center;gap:5px;"><span style="width:9px;height:9px;border-radius:2px;background:#C7304C;"></span>Ушли сами ${t.leftSelf}</span>
           <span style="display:flex;align-items:center;gap:5px;"><span style="width:9px;height:9px;border-radius:2px;background:#B7791F;"></span>Отказали мы ${t.refused}</span>
           <span style="display:flex;align-items:center;gap:5px;"><span style="width:9px;height:9px;border-radius:2px;background:#4457E8;"></span>Перенесли ${t.transferred}</span>
@@ -734,7 +832,7 @@ function renderOverview(data){
       </div>
     </div>
     <div class="section">
-      <div class="section-head"><h2>Отсев по месяцам</h2><div class="desc">ушли сами / отказали / перенесли</div></div>
+      <div class="section-head"><h2>Отсев по месяцам</h2><div class="desc">Всегда полная история, даже если сверху выбран один месяц</div></div>
       <div style="overflow-x:auto;">
         <table class="dropout-table">
           <thead><tr><th>Месяц</th><th>Групп</th><th>Ушли сами</th><th>Отказали</th><th>Перенесли</th><th>Конв. 1→5</th></tr></thead>
@@ -751,11 +849,11 @@ function renderOverview(data){
           </tbody>
         </table>
       </div>
-      <div style="margin-top:10px;font-size:12px;color:var(--text-muted);">Таблица месяцев всегда по полной истории API (не зависит от фильтра периода).</div>
+      <div class="footnote">На что смотреть: красный/розовый бейдж конверсии — ниже плана; зелёный — у цели.</div>
     </div>
     <div class="three-col">
-      ${topBottomCard(data, 'Лучшие тренеры (взвеш. 1→5)', true)}
-      ${topBottomCard(data, 'Требуют внимания (взвеш. 1→5)', false)}
+      ${topBottomCard(data, 'Лучшие тренеры', true)}
+      ${topBottomCard(data, 'Требуют внимания', false)}
       ${monthSummaryMiniCard(data)}
     </div>
   </div>`;
@@ -772,15 +870,18 @@ function trainerConv(t){
 function topBottomCard(data, title, top){
   const sorted = [...data.byTrainer].filter(t=>trainerConv(t)!==null && t.groups>=2)
     .sort((a,b)=> top ? trainerConv(b)-trainerConv(a) : trainerConv(a)-trainerConv(b)).slice(0,4);
-  let rows = sorted.map(t => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-top:1px solid var(--border-soft);"><span>${t.name}</span><span class="badge ${pctBadgeClass(trainerConv(t))}">${trainerConv(t)}%</span></div>`).join('');
-  return `<div class="section"><div class="section-head"><h2>${title}</h2></div>${rows || '<div style="color:var(--text-muted);font-size:13px;">Недостаточно данных</div>'}</div>`;
+  const desc = top
+    ? `Выше всех по взвеш. 1→5 · область: ${periodScopeLabel(data.periodFiltered)}`
+    : `Ниже всех по взвеш. 1→5 · область: ${periodScopeLabel(data.periodFiltered)}`;
+  let rows = sorted.map(t => `<div class="rank-row"><span class="name">${t.name}</span><span class="badge ${pctBadgeClass(trainerConv(t))}">${trainerConv(t)}%</span></div>`).join('');
+  return `<div class="section"><div class="section-head"><h2>${title}</h2><div class="desc">${desc}</div></div>${rows || '<div class="footnote">Недостаточно данных (нужно ≥2 группы)</div>'}</div>`;
 }
 function monthSummaryMiniCard(data){
   const months = dashboardData.byMonth || [];
   const last = months[months.length-1];
   const prev = months.length>1 ? months[months.length-2] : null;
-  if(!last) return '<div class="section"><div class="section-head"><h2>Последний месяц</h2></div><div style="color:var(--text-muted);font-size:13px;">Нет данных</div></div>';
-  return `<div class="section"><div class="section-head"><h2>Последний месяц: ${last.month}</h2></div>
+  if(!last) return '<div class="section"><div class="section-head"><h2>Последний месяц</h2></div><div class="footnote">Нет данных</div></div>';
+  return `<div class="section"><div class="section-head"><h2>Фокус: ${last.month}</h2><div class="desc">Отдельный месяц, не весь период</div></div>
     <div class="mini-kpi-grid" style="grid-template-columns:1fr 1fr;">
       <div class="mini-kpi"><div class="label">Групп</div><div class="value">${last.groups}</div>
         ${prev?`<div class="compare-row ${last.groups-prev.groups>=0?'up':'down'}">${last.groups-prev.groups>=0?'▲':'▼'} ${Math.abs(last.groups-prev.groups)} к ${prev.month}</div>`:''}
@@ -789,8 +890,8 @@ function monthSummaryMiniCard(data){
         ${prev&&last.conv1to5!=null&&prev.conv1to5!=null?`<div class="compare-row ${last.conv1to5-prev.conv1to5>=0?'up':'down'}">${last.conv1to5-prev.conv1to5>=0?'▲':'▼'} ${Math.abs(round1(last.conv1to5-prev.conv1to5))}% к ${prev.month}</div>`:''}
       </div>
     </div>
-    <div style="margin-top:10px;font-size:12px;color:var(--text-secondary);">
-      Отсев: сами ${last.leftSelf!=null?last.leftSelf:'—'} · отказали ${last.refused!=null?last.refused:'—'} · перенесли ${last.transferred!=null?last.transferred:'—'}
+    <div class="footnote">
+      Отсев за ${last.month}: ушли ${last.leftSelf!=null?last.leftSelf:'—'} · отказали ${last.refused!=null?last.refused:'—'} · перенесли ${last.transferred!=null?last.transferred:'—'}
     </div>
   </div>`;
 }
@@ -828,8 +929,16 @@ function renderPieChart(canvasId, t){
 
 function renderTrainersTab(data){
   let html = `<div id="panel-trainers" class="tab-panel">
+    <div class="context-banner" style="margin-bottom:14px;">
+      <div>
+        <div class="eyebrow">Вкладка тренеров</div>
+        <div class="headline">${data.periodFiltered ? `Тренеры за месяц «${periodMonth}»` : 'Тренеры за весь период'}</div>
+        <div class="support">Главное число для сравнения — «Конв. взвеш.» (final ÷ day1). «Конв. ср.%» — среднее процентов групп, может отличаться.</div>
+      </div>
+      <div class="side-note">Клик по строке открывает карточку. Кнопка «Ссылка» копирует deep-link.</div>
+    </div>
     <div class="section">
-      <div class="section-head"><h2>Все тренеры</h2><div class="desc">взвеш. = final/day1 · ср.% = среднее по группам · клик — карточка</div></div>
+      <div class="section-head"><h2>Таблица тренеров</h2><div class="desc">Сортировка по заголовку · поиск по имени</div></div>
       <div class="table-controls"><input type="text" id="trainerSearch" placeholder="Поиск по имени тренера..."></div>
       <div style="overflow-x:auto;"><table><thead><tr id="trainerHeadRow"></tr></thead><tbody id="trainerBody"></tbody></table></div>
     </div>
@@ -920,7 +1029,7 @@ function openTrainerDetail(name, opts={}){
       <div class="mini-kpi"><div class="label">Конв. 2→5</div><div class="value">${trainer.conv2!=null?trainer.conv2+'%':'—'}</div></div>
       <div class="mini-kpi"><div class="label">Конв. 3→5</div><div class="value">${trainer.conv3!=null?trainer.conv3+'%':'—'}</div></div>
     </div>
-    <div style="font-size:12px;color:var(--text-muted);margin:-6px 0 14px;">В карточке — все агрегаты API по valid-группам тренера${periodMonth?` за «${periodMonth}»`:''}. «Не собралась/распалась» по тренеру в API нет.</div>
+    <div class="footnote" style="margin:-2px 0 14px;">Область карточки: ${periodMonth?`месяц «${periodMonth}»`:'весь период'}. Показаны все агрегаты API по valid-группам. «Не собралась/распалась» по тренеру в API нет.</div>
     <div class="section-head"><h2>Воронка тренера</h2></div>
     <div class="funnel" id="trainerFunnel" style="margin-bottom:22px;"></div>
     <div class="section-head"><h2>Динамика и отсев по месяцам</h2></div>
@@ -969,7 +1078,15 @@ el('detailOverlay').addEventListener('click', (e)=>{ if(e.target.id==='detailOve
 function renderMonthsTab(data){
   const months = data.periodFiltered ? data.byMonth : (dashboardData.byMonth || []);
   let html = `<div id="panel-months" class="tab-panel">
-    <div class="section"><div class="section-head"><h2>Месяцы обучения</h2><div class="desc">клик по карточке — подробности · показан отсев</div></div>
+    <div class="context-banner" style="margin-bottom:14px;">
+      <div>
+        <div class="eyebrow">Вкладка месяцев</div>
+        <div class="headline">${data.periodFiltered ? `Карточки с фокусом на «${periodMonth}»` : 'Все месяцы обучения'}</div>
+        <div class="support">Каждая карточка — статистика одного месяца. Клик открывает тренеров и воронку за этот месяц.</div>
+      </div>
+      <div class="side-note">Конверсия на карточке — взвешенная (final ÷ day1).</div>
+    </div>
+    <div class="section"><div class="section-head"><h2>Месяцы</h2><div class="desc">Сначала смотри конверсию и отсев, потом проваливайся в детали</div></div>
     <div class="month-grid" id="monthGrid"></div></div>
   </div>`;
   el('content').insertAdjacentHTML('beforeend', html);
