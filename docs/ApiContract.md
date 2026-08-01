@@ -35,6 +35,9 @@ type DashboardPayload = {
 | `conv1to5ByTrainer` | string | `'avgGroups'` — среднее % групп в поле `conv1to5` |
 | `conv1to5ByMonth` | string | `'weighted'` |
 | `fellApartInValid` | boolean | `true` — «распалась» входит в valid с меткой |
+| `rankScore` | string | `'tqi'` — составной индекс тренера |
+| `rankMinGroups` / `rankMinDay1` | number | порог участия в топе (2 / 10) |
+| `rankWeights` | object | веса TQI: `conv1to5`, `conv2`, `conv3`, `retention`, `refuseControl`, `stability` (сумма 1.0) |
 | `badgeLow` | number | порог «средне» (20) |
 | `badgeHigh` | number | порог «хорошо» (30) |
 | `planConv1to5` | number | план конверсии для KPI (30) |
@@ -74,8 +77,23 @@ type DashboardPayload = {
 | `conv1to5Weighted` | number \| null | **Взвешенная** `finalCount/day1*100` (как totals) |
 | `fellApartConv1to5` | number \| null | Взвешенная конверсия только по распавшимся группам тренера |
 | `conv2` / `conv3` | number \| null | Средние по группам, где есть значение |
+| `score` | number \| null | **TQI** 0–100 (ADR-012); `null` если нет `conv1to5Weighted` |
 
-> Два поля конверсии 1→5 — осознанно (ADR-004 / ADR-007). UI по умолчанию опирается на `conv1to5Weighted` для операционного сравнения.
+### Формула TQI (`score`)
+
+```
+TQI = 0.45·C15 + 0.15·C2' + 0.10·C3'
+    + 0.20·(100−L) + 0.05·(100−R) + 0.05·(100−F)
+```
+
+- `C15` = `conv1to5Weighted`
+- `C2'` / `C3'` = `conv2` / `conv3`, иначе fallback на `C15`
+- `L` = `leftSelf/day1*100`, `R` = `refused/day1*100`, `F` = `fellApart/groups*100`
+- компоненты удержания/стабильности clamp в 0…100
+
+UI топ/низ и сортировка таблицы используют `score`; веса читает из `metrics.rankWeights`. При фильтре месяца UI пересчитывает TQI той же формулой.
+
+> Два поля конверсии 1→5 — осознанно (ADR-004 / ADR-007). Для операционного сравнения одной метрики — `conv1to5Weighted`; для рейтинга — `score`.
 
 ## `byMonth[]`
 
@@ -131,6 +149,17 @@ Valid-группы (включая распавшиеся):
     "conv1to5ByTrainer": "avgGroups",
     "conv1to5ByMonth": "weighted",
     "fellApartInValid": true,
+    "rankScore": "tqi",
+    "rankMinGroups": 2,
+    "rankMinDay1": 10,
+    "rankWeights": {
+      "conv1to5": 0.45,
+      "conv2": 0.15,
+      "conv3": 0.10,
+      "retention": 0.20,
+      "refuseControl": 0.05,
+      "stability": 0.05
+    },
     "badgeLow": 20,
     "badgeHigh": 30,
     "planConv1to5": 30

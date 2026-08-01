@@ -115,7 +115,8 @@ clasp login
 ## Смоук-чек после релиза
 
 - [ ] `GET /exec` возвращает JSON с `schemaVersion: 3`, `metrics.fellApartInValid`, `totals`, `byTrainer`, `byMonth`, `groups`
-- [ ] У тренера есть `conv1to5Weighted` и `fellApart`; у группы — `fellApart`; у totals — `fellApartConv1to5`
+- [ ] У тренера есть `conv1to5Weighted`, `fellApart`, `score` (TQI); у группы — `fellApart`; у totals — `fellApartConv1to5`
+- [ ] В UI топ тренеров показывает TQI, не только % 1→5
 - [ ] Netlify UI: KPI «Распалось групп», бейдж в карточке тренера, статус «Обновлено…»
 - [ ] Фильтр периода переключает данные; легенда порогов видна
 - [ ] В шапке видно «Данные API: …»; кнопка «Экспорт CSV» скачивает файл

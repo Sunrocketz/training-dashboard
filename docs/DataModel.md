@@ -63,7 +63,7 @@
 
 | Сущность | Как строится |
 |----------|--------------|
-| `byTrainer` | group-by нормализованный тренер по valid; `fellApart` / `fellApartConv1to5`; `conv1to5` = ср.% групп, `conv1to5Weighted` = final/day1 |
+| `byTrainer` | group-by нормализованный тренер по valid; `score` (TQI), `fellApart` / `fellApartConv1to5`; `conv1to5` = ср.% групп, `conv1to5Weighted` = final/day1 |
 | `byMonth` | group-by `month`; суммы day1/final/отсев + `fellApart` + взвешенные conv |
 | `groups` | map valid → GroupRow (`fellApart` boolean) |
 | `totals` / `funnel` | суммы по valid; `notGathered` вне valid; метрики распада (`fellApart*`) |

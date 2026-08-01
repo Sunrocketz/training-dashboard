@@ -126,7 +126,7 @@ function collectDashboardData() {
 
   var trainerList = Object.keys(byTrainer).sort().map(function(name) {
     var t = byTrainer[name];
-    return {
+    var row = {
       name: t.name,
       groups: t.groups,
       fellApart: t.fellApart,
@@ -143,6 +143,8 @@ function collectDashboardData() {
       conv2: t.conv2Count > 0 ? round1(t.conv2Sum / t.conv2Count * 100) : null,
       conv3: t.conv3Count > 0 ? round1(t.conv3Sum / t.conv3Count * 100) : null
     };
+    row.score = computeTrainerScore(row);
+    return row;
   });
 
   // ---- по месяцам (для тренда + отсев) ----
@@ -237,6 +239,17 @@ function collectDashboardData() {
       conv1to5ByTrainer: 'avgGroups',  // среднее % групп; см. также conv1to5Weighted
       conv1to5ByMonth: 'weighted',
       fellApartInValid: true,          // «распалась» входит в valid + метка
+      rankScore: 'tqi',                // Trainer Quality Index — составной рейтинг
+      rankMinGroups: 2,
+      rankMinDay1: 10,
+      rankWeights: {
+        conv1to5: 0.45,
+        conv2: 0.15,
+        conv3: 0.10,
+        retention: 0.20,
+        refuseControl: 0.05,
+        stability: 0.05
+      },
       badgeLow: 20,
       badgeHigh: 30,
       planConv1to5: 30
@@ -308,12 +321,17 @@ function buildDashboard() {
   var tableStartRow = 4 + summaryRows.length + 3;
   dash.getRange(tableStartRow, 1).setValue('ПО ТРЕНЕРАМ').setFontWeight('bold').setFontSize(13);
 
-  var trainerHeaders = ['Тренер', 'Групп', 'Распалось', 'Вышло 1 день', 'Ушли сами', 'Отказали мы', 'Перенесли', 'Итог выход', 'Конв. 1→5', 'Конв. 2→5', 'Конв. 3→5'];
+  var trainerHeaders = ['Тренер', 'Индекс TQI', 'Групп', 'Распалось', 'Вышло 1 день', 'Ушли сами', 'Отказали мы', 'Перенесли', 'Итог выход', 'Конв. 1→5', 'Конв. 2→5', 'Конв. 3→5'];
   var headerRow = tableStartRow + 1;
   dash.getRange(headerRow, 1, 1, trainerHeaders.length).setValues([trainerHeaders]).setFontWeight('bold').setBackground('#d9d9d9');
 
-  var trainerRows = data.byTrainer.map(function(tr) {
-    return [tr.name, tr.groups, tr.fellApart || 0, tr.day1, tr.leftSelf, tr.refused, tr.transferred, tr.finalCount,
+  var trainersSorted = data.byTrainer.slice().sort(function(a, b) {
+    var as = a.score != null ? a.score : -1;
+    var bs = b.score != null ? b.score : -1;
+    return bs - as;
+  });
+  var trainerRows = trainersSorted.map(function(tr) {
+    return [tr.name, tr.score != null ? tr.score : '', tr.groups, tr.fellApart || 0, tr.day1, tr.leftSelf, tr.refused, tr.transferred, tr.finalCount,
       tr.conv1to5 !== null ? tr.conv1to5 + '%' : '',
       tr.conv2 !== null ? tr.conv2 + '%' : '',
       tr.conv3 !== null ? tr.conv3 + '%' : ''];
@@ -326,19 +344,19 @@ function buildDashboard() {
   var chart1 = dash.newChart()
     .setChartType(Charts.ChartType.COLUMN)
     .addRange(dash.getRange(headerRow, 1, trainerRows.length + 1, 1))
-    .addRange(dash.getRange(headerRow, 8, trainerRows.length + 1, 1))
+    .addRange(dash.getRange(headerRow, 9, trainerRows.length + 1, 1))
     .setPosition(headerRow, trainerHeaders.length + 2, 0, 0)
     .setOption('title', 'Итоговый выход на линию по тренерам')
     .setOption('width', 600).setOption('height', 350)
     .build();
   dash.insertChart(chart1);
 
-  dash.getRange(tableStartRow - 2, 13, 3, 2).setValues([
+  dash.getRange(tableStartRow - 2, 14, 3, 2).setValues([
     ['Ушли сами', t.leftSelf], ['Отказали мы', t.refused], ['Перенесли', t.transferred]
   ]);
   var chart2 = dash.newChart()
     .setChartType(Charts.ChartType.PIE)
-    .addRange(dash.getRange(tableStartRow - 2, 13, 3, 2))
+    .addRange(dash.getRange(tableStartRow - 2, 14, 3, 2))
     .setPosition(headerRow, trainerHeaders.length + 2, 20, 0)
     .setOption('title', 'Структура отсева (всего)')
     .setOption('width', 600).setOption('height', 350)
@@ -413,4 +431,41 @@ function parsePercent(value) {
 
 function round1(n) {
   return Math.round(n * 10) / 10;
+}
+
+function clamp100(n) {
+  if (n < 0) return 0;
+  if (n > 100) return 100;
+  return n;
+}
+
+/**
+ * TQI — Trainer Quality Index (0–100).
+ * Учитывает конверсии 1→5 / 2→5 / 3→5, удержание (мало «ушли сами»),
+ * контроль отказов и стабильность групп (мало «распалась»).
+ * Веса — см. metrics.rankWeights (ADR-012).
+ */
+function computeTrainerScore(t, weights) {
+  var c15 = t.conv1to5Weighted;
+  if (c15 === null || c15 === undefined) return null;
+  var w = weights || {
+    conv1to5: 0.45, conv2: 0.15, conv3: 0.10,
+    retention: 0.20, refuseControl: 0.05, stability: 0.05
+  };
+  var c2 = (t.conv2 !== null && t.conv2 !== undefined) ? t.conv2 : c15;
+  var c3 = (t.conv3 !== null && t.conv3 !== undefined) ? t.conv3 : c15;
+  var leftRate = t.day1 > 0 ? (Number(t.leftSelf) || 0) / t.day1 * 100 : 0;
+  var refuseRate = t.day1 > 0 ? (Number(t.refused) || 0) / t.day1 * 100 : 0;
+  var fellShare = t.groups > 0 ? (Number(t.fellApart) || 0) / t.groups * 100 : 0;
+  var retention = clamp100(100 - leftRate);
+  var refuseControl = clamp100(100 - refuseRate);
+  var stability = clamp100(100 - fellShare);
+  var score =
+    (w.conv1to5 || 0) * c15 +
+    (w.conv2 || 0) * c2 +
+    (w.conv3 || 0) * c3 +
+    (w.retention || 0) * retention +
+    (w.refuseControl || 0) * refuseControl +
+    (w.stability || 0) * stability;
+  return round1(score);
 }
