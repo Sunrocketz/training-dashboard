@@ -1,0 +1,22 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.local.bak
+.vscode/
+.idea/
+
+# Secrets & local credentials (never commit)
+.clasprc.json
+.env
+.env.*
+!.env.example
+
+# Dependencies / build (if added later)
+node_modules/
+dist/
+.cache/
+.netlify/
+
+# Logs
+*.log
+npm-debug.log*

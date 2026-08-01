@@ -1,0 +1,14 @@
+---
+description: Правила для Google Apps Script backend
+globs: apps-script/**
+alwaysApply: false
+---
+
+# Apps Script (`apps-script/`)
+
+- Единый расчёт: `collectDashboardData()`. `buildDashboard` и `doGet` — потребители.
+- Конфиг листа/диапазона — только в блоке НАСТРОЙКИ вверху `Код.js`.
+- Индексы колонок = `COL` + `docs/DataModel.md`; не хардкодить «магические» номера вразброс.
+- В JSON не включать ПДн учеников; только агрегаты (Security.md).
+- После изменения кода для прод-URL: `clasp push` и обновление **существующего** deployment (Runbook).
+- Ломающий контракт → обновить `docs/ApiContract.md` и UI в том же изменении.

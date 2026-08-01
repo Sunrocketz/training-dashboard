@@ -159,6 +159,28 @@
   .month-card .row{display:flex; justify-content:space-between; font-size:12px; color:var(--text-secondary); margin-bottom:4px;}
   .month-card .row b{color:var(--text-primary); font-family:var(--font-mono);}
 
+  .toolbar{
+    display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between;
+    margin-bottom:16px; padding:12px 14px; background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; box-shadow:var(--shadow);
+  }
+  .toolbar-left, .toolbar-right{display:flex; flex-wrap:wrap; gap:10px; align-items:center;}
+  .toolbar label{font-size:13px; color:var(--text-secondary);}
+  .toolbar select{
+    background:var(--surface-2); border:1px solid var(--border); border-radius:8px;
+    color:var(--text-primary); font-size:13px; padding:8px 12px; min-width:180px;
+  }
+  .toolbar select:focus{outline:none; border-color:var(--accent);}
+  .legend-bar{display:flex; flex-wrap:wrap; gap:10px 14px; align-items:center; font-size:12px; color:var(--text-secondary);}
+  .kpi-card .delta{font-size:12px; margin-top:6px; font-family:var(--font-mono);}
+  .kpi-card .delta.up{color:var(--success);}
+  .kpi-card .delta.down{color:var(--danger);}
+  .kpi-card .delta.flat{color:var(--text-muted);}
+  .dropout-table{width:100%; border-collapse:collapse; font-size:13px;}
+  .dropout-table th{text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--text-muted); font-weight:500; padding:0 10px 10px;}
+  .dropout-table td{padding:10px; border-top:1px solid var(--border-soft); font-family:var(--font-mono);}
+  .dropout-table td:first-child{font-family:var(--font-body); font-weight:500;}
+
   @media (max-width:900px){
     .kpi-grid{grid-template-columns:repeat(2,1fr);}
     .two-col, .three-col{grid-template-columns:1fr;}
@@ -197,6 +219,17 @@
     <button class="tab-btn" data-tab="months">По месяцам</button>
   </div>
 
+  <div class="toolbar" id="toolbar" style="display:none;">
+    <div class="toolbar-left">
+      <label for="periodSelect">Период</label>
+      <select id="periodSelect" aria-label="Фильтр по месяцу">
+        <option value="">Все месяцы</option>
+      </select>
+      <span id="periodHint" style="font-size:12px;color:var(--text-muted);"></span>
+    </div>
+    <div class="toolbar-right legend-bar" id="badgeLegend"></div>
+  </div>
+
   <div id="content">
     <div class="placeholder">
       <div class="big">Данные ещё не загружены</div>
@@ -213,13 +246,22 @@
 const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNjs7MKzbt9Fw/exec';
 
 let dashboardData = null;
+let viewData = null;
+let periodMonth = '';
 let refreshTimeout = null, refreshInterval = null;
-let trainerSortState = { key: 'conv1to5', dir: 'desc' };
+let trainerSortState = { key: 'conv1to5Weighted', dir: 'desc' };
+let tabsInited = false;
 const DAY_MS = 24*60*60*1000;
 const el = (id) => document.getElementById(id);
 let charts = {};
 
+const DEFAULT_METRICS = { badgeLow: 20, badgeHigh: 30, planConv1to5: 30 };
+
 function destroyChart(key){ if(charts[key]){ charts[key].destroy(); delete charts[key]; } }
+function metrics(){ return Object.assign({}, DEFAULT_METRICS, (dashboardData && dashboardData.metrics) || {}); }
+function round1(n){ return Math.round(n * 10) / 10; }
+function pct(part, whole){ return whole ? round1((part/whole)*100) : 0; }
+function sumField(rows, key){ return rows.reduce((s,r)=>s+(Number(r[key])||0), 0); }
 
 function getNextRefreshTime(){
   const now = new Date();
@@ -249,6 +291,189 @@ function setStatus(state, text){
   el('statusText').textContent = text;
 }
 
+function pctBadgeClass(value){
+  const m = metrics();
+  if(value===null||value===undefined) return '';
+  if(value>=m.badgeHigh) return 'success';
+  if(value>=m.badgeLow) return 'warning';
+  return 'danger';
+}
+
+function renderBadgeLegend(){
+  const m = metrics();
+  el('badgeLegend').innerHTML = `
+    <span>Конв. 1→5:</span>
+    <span class="badge success">≥${m.badgeHigh}% хорошо</span>
+    <span class="badge warning">${m.badgeLow}–${m.badgeHigh-0.1}% средне</span>
+    <span class="badge danger"><${m.badgeLow}% низко</span>
+    <span style="color:var(--text-muted);">план ${m.planConv1to5}%</span>
+  `;
+}
+
+function aggregateFromGroups(groups, raw){
+  const day1 = sumField(groups,'day1');
+  const day2Start = sumField(groups,'day2Start');
+  const day3Start = sumField(groups,'day3Start');
+  const leftSelf = sumField(groups,'leftSelf');
+  const refused = sumField(groups,'refused');
+  const transferred = sumField(groups,'transferred');
+  const finalCount = sumField(groups,'finalCount');
+
+  const byTrainerMap = {};
+  groups.forEach(g=>{
+    if(!byTrainerMap[g.trainer]){
+      byTrainerMap[g.trainer] = {
+        name:g.trainer, groups:0, day1:0, leftSelf:0, refused:0, transferred:0, finalCount:0,
+        conv1to5Sum:0, conv1to5Count:0, conv2Sum:0, conv2Count:0, conv3Sum:0, conv3Count:0
+      };
+    }
+    const t = byTrainerMap[g.trainer];
+    t.groups += 1;
+    t.day1 += g.day1; t.leftSelf += g.leftSelf; t.refused += g.refused;
+    t.transferred += g.transferred; t.finalCount += g.finalCount;
+    if(g.conv1to5!==null && g.conv1to5!==undefined){ t.conv1to5Sum += g.conv1to5; t.conv1to5Count += 1; }
+    if(g.conv2!==null && g.conv2!==undefined){ t.conv2Sum += g.conv2; t.conv2Count += 1; }
+    if(g.conv3!==null && g.conv3!==undefined){ t.conv3Sum += g.conv3; t.conv3Count += 1; }
+  });
+  const byTrainer = Object.values(byTrainerMap).sort((a,b)=>a.name.localeCompare(b.name,'ru')).map(t=>({
+    name:t.name, groups:t.groups, day1:t.day1, leftSelf:t.leftSelf, refused:t.refused,
+    transferred:t.transferred, finalCount:t.finalCount,
+    conv1to5: t.conv1to5Count>0 ? round1(t.conv1to5Sum/t.conv1to5Count) : null,
+    conv1to5Weighted: t.day1>0 ? round1(t.finalCount/t.day1*100) : null,
+    conv2: t.conv2Count>0 ? round1(t.conv2Sum/t.conv2Count) : null,
+    conv3: t.conv3Count>0 ? round1(t.conv3Sum/t.conv3Count) : null
+  }));
+
+  const monthOrder = [];
+  const byMonthMap = {};
+  groups.forEach(g=>{
+    if(!byMonthMap[g.month]){
+      byMonthMap[g.month] = {month:g.month, groups:0, day1:0, finalCount:0, leftSelf:0, refused:0, transferred:0};
+      monthOrder.push(g.month);
+    }
+    const m = byMonthMap[g.month];
+    m.groups += 1; m.day1 += g.day1; m.finalCount += g.finalCount;
+    m.leftSelf += g.leftSelf; m.refused += g.refused; m.transferred += g.transferred;
+  });
+  const byMonth = monthOrder.map(key=>{
+    const m = byMonthMap[key];
+    return {
+      ...m,
+      conv1to5: m.day1>0 ? round1(m.finalCount/m.day1*100) : null
+    };
+  });
+
+  return {
+    schemaVersion: raw.schemaVersion,
+    updatedAt: raw.updatedAt,
+    metrics: raw.metrics,
+    periodFiltered: true,
+    totals: {
+      groups: groups.length,
+      notGathered: null,
+      fellApart: null,
+      day1, day2Start, day3Start, leftSelf, refused, transferred, finalCount,
+      conv1to5: day1>0 ? round1(finalCount/day1*100) : 0
+    },
+    funnel: [
+      {label:'1-й день', value: day1},
+      {label:'2-й день', value: day2Start},
+      {label:'3-й день', value: day3Start},
+      {label:'Выход на линию', value: finalCount}
+    ],
+    byTrainer,
+    byMonth,
+    groups,
+    allByMonth: raw.byMonth || []
+  };
+}
+
+function buildViewData(raw, month){
+  if(!month){
+    return Object.assign({}, raw, {
+      periodFiltered: false,
+      allByMonth: raw.byMonth || [],
+      byTrainer: (raw.byTrainer||[]).map(t=>({
+        ...t,
+        conv1to5Weighted: t.conv1to5Weighted!=null ? t.conv1to5Weighted
+          : (t.day1>0 ? round1(t.finalCount/t.day1*100) : null)
+      })),
+      byMonth: (raw.byMonth||[]).map(m=>({
+        ...m,
+        day1: m.day1!=null ? m.day1 : null,
+        leftSelf: m.leftSelf!=null ? m.leftSelf : 0,
+        refused: m.refused!=null ? m.refused : 0,
+        transferred: m.transferred!=null ? m.transferred : 0,
+        finalCount: m.finalCount!=null ? m.finalCount : null
+      }))
+    });
+  }
+  const groups = (raw.groups||[]).filter(g=>g.month===month);
+  return aggregateFromGroups(groups, raw);
+}
+
+function momContext(raw, month){
+  const months = raw.byMonth || [];
+  if(!months.length) return null;
+  let idx;
+  if(month){
+    idx = months.findIndex(m=>m.month===month);
+  } else {
+    idx = months.length - 1;
+  }
+  if(idx < 0) return null;
+  const current = months[idx];
+  const prev = idx > 0 ? months[idx-1] : null;
+  return { current, prev, label: prev ? `к ${prev.month}` : null };
+}
+
+function deltaHtml(current, previous, opts={}){
+  if(previous==null || current==null || Number.isNaN(current) || Number.isNaN(previous)){
+    return `<div class="delta flat">нет базы для сравнения</div>`;
+  }
+  const diff = round1(current - previous);
+  const invert = !!opts.invert;
+  const good = invert ? diff <= 0 : diff >= 0;
+  const cls = diff === 0 ? 'flat' : (good ? 'up' : 'down');
+  const arrow = diff > 0 ? '▲' : diff < 0 ? '▼' : '•';
+  const unit = opts.unit || '';
+  const label = opts.label || '';
+  return `<div class="delta ${cls}">${arrow} ${diff>0?'+':''}${diff}${unit} ${label}</div>`;
+}
+
+function fillPeriodSelect(raw){
+  const select = el('periodSelect');
+  const current = periodMonth;
+  const months = raw.byMonth || [];
+  select.innerHTML = `<option value="">Все месяцы</option>` + months.map(m=>
+    `<option value="${m.month}">${m.month}</option>`
+  ).join('');
+  select.value = current;
+  if(select.value !== current) periodMonth = '';
+}
+
+function renderAll(){
+  if(!dashboardData) return;
+  viewData = buildViewData(dashboardData, periodMonth);
+  const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab || 'overview';
+  el('tabs').style.display = 'flex';
+  el('toolbar').style.display = 'flex';
+  fillPeriodSelect(dashboardData);
+  renderBadgeLegend();
+  const hint = el('periodHint');
+  if(periodMonth){
+    hint.textContent = `Показаны valid-группы за «${periodMonth}». «Не собралась/распалась» в фильтре недоступны.`;
+  } else {
+    hint.textContent = 'Сравнение KPI — последний месяц к предыдущему.';
+  }
+  renderOverview(viewData);
+  renderTrainersTab(viewData);
+  renderMonthsTab(viewData);
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===activeTab));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+activeTab));
+  initTabsOnce();
+}
+
 async function fetchData(url){
   setStatus('', 'Загрузка...');
   try{
@@ -256,10 +481,7 @@ async function fetchData(url){
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data = await res.json();
     dashboardData = data;
-    el('tabs').style.display = 'flex';
-    renderOverview(data);
-    renderTrainersTab(data);
-    renderMonthsTab(data);
+    renderAll();
     setStatus('live', 'Обновлено в ' + new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}));
   }catch(err){
     setStatus('error', 'Ошибка подключения');
@@ -276,6 +498,10 @@ el('connectBtn').addEventListener('click', () => {
 el('refreshBtn').addEventListener('click', () => {
   const url = el('urlInput').value.trim(); if(url) fetchData(url);
 });
+el('periodSelect').addEventListener('change', () => {
+  periodMonth = el('periodSelect').value;
+  renderAll();
+});
 if(DEFAULT_APPS_SCRIPT_URL){
   el('urlInput').value = DEFAULT_APPS_SCRIPT_URL;
   el('config').style.display = 'none';
@@ -283,41 +509,58 @@ if(DEFAULT_APPS_SCRIPT_URL){
   startAutoRefresh(DEFAULT_APPS_SCRIPT_URL);
 }
 
-// ---- tabs ----
 function initTabsOnce(){
+  if(tabsInited) return;
+  tabsInited = true;
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
       document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
       btn.classList.add('active');
-      el('panel-'+btn.dataset.tab).classList.add('active');
+      const panel = el('panel-'+btn.dataset.tab);
+      if(panel) panel.classList.add('active');
     });
   });
 }
 
-function pctBadgeClass(value, low, high){
-  if(value===null||value===undefined) return '';
-  if(value>=high) return 'success';
-  if(value>=low) return 'warning';
-  return 'danger';
-}
-function pct(part, whole){ return whole ? Math.round((part/whole)*1000)/10 : 0; }
-
-// ============ ОБЗОР ============
 function renderOverview(data){
   const t = data.totals;
+  const m = metrics();
+  const mom = momContext(dashboardData, periodMonth);
+  const cur = mom && mom.current ? mom.current : null;
+  const prev = mom && mom.prev ? mom.prev : null;
+  const cmpLabel = mom && mom.label ? mom.label : '';
+
+  // Для режима «все месяцы» KPI — totals всего периода, а дельта — последний месяц vs предыдущий по ключевым метрикам месяца
+  const showMomOnTotals = !data.periodFiltered;
+  const convNow = data.periodFiltered ? t.conv1to5 : (cur && cur.conv1to5!=null ? cur.conv1to5 : t.conv1to5);
+  const groupsDelta = showMomOnTotals && cur && prev ? deltaHtml(cur.groups, prev.groups, {label: cmpLabel})
+    : (!showMomOnTotals && prev ? deltaHtml(t.groups, prev.groups, {label: cmpLabel}) : `<div class="delta flat">${showMomOnTotals?'дельта: последний месяц': 'нет предыдущего месяца'}</div>`);
+  const convDelta = showMomOnTotals && cur && prev ? deltaHtml(cur.conv1to5, prev.conv1to5, {unit:'%', label: cmpLabel})
+    : (!showMomOnTotals && prev ? deltaHtml(t.conv1to5, prev.conv1to5, {unit:'%', label: cmpLabel}) : `<div class="delta flat">—</div>`);
+  const leftDelta = showMomOnTotals && cur && prev ? deltaHtml(cur.leftSelf||0, prev.leftSelf||0, {invert:true, label: cmpLabel})
+    : (!showMomOnTotals && prev ? deltaHtml(t.leftSelf, prev.leftSelf||0, {invert:true, label: cmpLabel}) : `<div class="delta flat">—</div>`);
+  const refusedDelta = showMomOnTotals && cur && prev ? deltaHtml(cur.refused||0, prev.refused||0, {invert:true, label: cmpLabel})
+    : (!showMomOnTotals && prev ? deltaHtml(t.refused, prev.refused||0, {invert:true, label: cmpLabel}) : `<div class="delta flat">—</div>`);
+  const finalDelta = showMomOnTotals && cur && prev ? deltaHtml(cur.finalCount||0, prev.finalCount||0, {label: cmpLabel})
+    : (!showMomOnTotals && prev ? deltaHtml(t.finalCount, prev.finalCount||0, {label: cmpLabel}) : `<div class="delta flat">—</div>`);
+
+  const notHeld = (t.notGathered!=null && t.fellApart!=null)
+    ? `${t.notGathered+t.fellApart} не состоялось`
+    : 'фильтр по valid-группам';
+
   let html = `
   <div id="panel-overview" class="tab-panel active">
     <div class="kpi-grid">
-      <div class="kpi-card"><div class="label">Всего групп</div><div class="value">${t.groups}</div><div class="sub">${t.notGathered+t.fellApart} не состоялось</div></div>
-      <div class="kpi-card ${t.conv1to5>=30?'success':'danger'}"><div class="label">Конверсия 1→5 день</div><div class="value">${t.conv1to5}%</div><div class="sub">план 30%</div></div>
-      <div class="kpi-card danger"><div class="label">Ушли сами</div><div class="value">${t.leftSelf}</div><div class="sub">${pct(t.leftSelf,t.day1)}% от вышедших</div></div>
-      <div class="kpi-card"><div class="label">Отказали мы</div><div class="value">${t.refused}</div><div class="sub">${pct(t.refused,t.day1)}% от вышедших</div></div>
-      <div class="kpi-card accent"><div class="label">Вышло на линию</div><div class="value">${t.finalCount}</div><div class="sub">из ${t.day1} на 1-й день</div></div>
+      <div class="kpi-card"><div class="label">Всего групп</div><div class="value">${t.groups}</div><div class="sub">${notHeld}</div>${groupsDelta}</div>
+      <div class="kpi-card ${t.conv1to5>=m.planConv1to5?'success':'danger'}"><div class="label">Конверсия 1→5 (взвеш.)</div><div class="value">${t.conv1to5}%</div><div class="sub">план ${m.planConv1to5}% · final/day1</div>${convDelta}</div>
+      <div class="kpi-card danger"><div class="label">Ушли сами</div><div class="value">${t.leftSelf}</div><div class="sub">${pct(t.leftSelf,t.day1)}% от вышедших</div>${leftDelta}</div>
+      <div class="kpi-card"><div class="label">Отказали мы</div><div class="value">${t.refused}</div><div class="sub">${pct(t.refused,t.day1)}% от вышедших</div>${refusedDelta}</div>
+      <div class="kpi-card accent"><div class="label">Вышло на линию</div><div class="value">${t.finalCount}</div><div class="sub">из ${t.day1} на 1-й день</div>${finalDelta}</div>
     </div>
     <div class="section"><div class="section-head"><h2>Воронка обучения</h2><div class="desc">кол-во учеников на каждом этапе</div></div><div class="funnel" id="funnelOverview"></div></div>
     <div class="two-col">
-      <div class="section"><div class="section-head"><h2>Динамика по месяцам</h2><div class="desc">конверсия 1→5 день</div></div><div style="position:relative;height:220px;"><canvas id="trendChart"></canvas></div></div>
+      <div class="section"><div class="section-head"><h2>Динамика по месяцам</h2><div class="desc">конверсия 1→5 (взвешенная)</div></div><div style="position:relative;height:220px;"><canvas id="trendChart"></canvas></div></div>
       <div class="section"><div class="section-head"><h2>Структура отсева</h2><div class="desc">всего ${t.leftSelf+t.refused+t.transferred}</div></div><div style="position:relative;height:220px;"><canvas id="pieChart"></canvas></div>
         <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:12px;font-size:12px;color:var(--text-secondary);">
           <span style="display:flex;align-items:center;gap:5px;"><span style="width:9px;height:9px;border-radius:2px;background:#C7304C;"></span>Ушли сами ${t.leftSelf}</span>
@@ -326,43 +569,75 @@ function renderOverview(data){
         </div>
       </div>
     </div>
+    <div class="section">
+      <div class="section-head"><h2>Отсев по месяцам</h2><div class="desc">ушли сами / отказали / перенесли</div></div>
+      <div style="overflow-x:auto;">
+        <table class="dropout-table">
+          <thead><tr><th>Месяц</th><th>Групп</th><th>Ушли сами</th><th>Отказали</th><th>Перенесли</th><th>Конв. 1→5</th></tr></thead>
+          <tbody>
+            ${(data.allByMonth||data.byMonth).map(row=>`
+              <tr>
+                <td>${row.month}</td>
+                <td>${row.groups}</td>
+                <td>${row.leftSelf!=null?row.leftSelf:'—'}</td>
+                <td>${row.refused!=null?row.refused:'—'}</td>
+                <td>${row.transferred!=null?row.transferred:'—'}</td>
+                <td><span class="badge ${pctBadgeClass(row.conv1to5)}">${row.conv1to5!=null?row.conv1to5+'%':'—'}</span></td>
+              </tr>`).join('') || '<tr><td colspan="6" style="font-family:var(--font-body);color:var(--text-muted);">Нет данных</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top:10px;font-size:12px;color:var(--text-muted);">Таблица месяцев всегда по полной истории API (не зависит от фильтра периода).</div>
+    </div>
     <div class="three-col">
-      ${topBottomCard(data, 'Лучшие тренеры (конв. 1→5)', true)}
-      ${topBottomCard(data, 'Требуют внимания (конв. 1→5)', false)}
+      ${topBottomCard(data, 'Лучшие тренеры (взвеш. 1→5)', true)}
+      ${topBottomCard(data, 'Требуют внимания (взвеш. 1→5)', false)}
       ${monthSummaryMiniCard(data)}
     </div>
   </div>`;
   el('content').innerHTML = html;
-  initTabsOnce();
   renderFunnelInto('funnelOverview', data.funnel);
-  renderTrendChart('trendChart', data.byMonth);
+  renderTrendChart('trendChart', data.periodFiltered ? data.byMonth : (dashboardData.byMonth||[]));
   renderPieChart('pieChart', t);
 }
 
+function trainerConv(t){
+  return t.conv1to5Weighted!=null ? t.conv1to5Weighted : t.conv1to5;
+}
+
 function topBottomCard(data, title, top){
-  const sorted = [...data.byTrainer].filter(t=>t.conv1to5!==null && t.groups>=2)
-    .sort((a,b)=> top ? b.conv1to5-a.conv1to5 : a.conv1to5-b.conv1to5).slice(0,4);
-  let rows = sorted.map(t => `<div class="month-card-row" style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-top:1px solid var(--border-soft);"><span>${t.name}</span><span class="badge ${pctBadgeClass(t.conv1to5,20,30)}">${t.conv1to5}%</span></div>`).join('');
+  const sorted = [...data.byTrainer].filter(t=>trainerConv(t)!==null && t.groups>=2)
+    .sort((a,b)=> top ? trainerConv(b)-trainerConv(a) : trainerConv(a)-trainerConv(b)).slice(0,4);
+  let rows = sorted.map(t => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-top:1px solid var(--border-soft);"><span>${t.name}</span><span class="badge ${pctBadgeClass(trainerConv(t))}">${trainerConv(t)}%</span></div>`).join('');
   return `<div class="section"><div class="section-head"><h2>${title}</h2></div>${rows || '<div style="color:var(--text-muted);font-size:13px;">Недостаточно данных</div>'}</div>`;
 }
 function monthSummaryMiniCard(data){
-  const months = data.byMonth;
+  const months = dashboardData.byMonth || [];
   const last = months[months.length-1];
+  const prev = months.length>1 ? months[months.length-2] : null;
   if(!last) return '<div class="section"><div class="section-head"><h2>Последний месяц</h2></div><div style="color:var(--text-muted);font-size:13px;">Нет данных</div></div>';
   return `<div class="section"><div class="section-head"><h2>Последний месяц: ${last.month}</h2></div>
     <div class="mini-kpi-grid" style="grid-template-columns:1fr 1fr;">
-      <div class="mini-kpi"><div class="label">Групп</div><div class="value">${last.groups}</div></div>
-      <div class="mini-kpi"><div class="label">Конв. 1→5</div><div class="value">${last.conv1to5!==null?last.conv1to5+'%':'—'}</div></div>
-    </div></div>`;
+      <div class="mini-kpi"><div class="label">Групп</div><div class="value">${last.groups}</div>
+        ${prev?`<div class="compare-row ${last.groups-prev.groups>=0?'up':'down'}">${last.groups-prev.groups>=0?'▲':'▼'} ${Math.abs(last.groups-prev.groups)} к ${prev.month}</div>`:''}
+      </div>
+      <div class="mini-kpi"><div class="label">Конв. 1→5</div><div class="value">${last.conv1to5!==null?last.conv1to5+'%':'—'}</div>
+        ${prev&&last.conv1to5!=null&&prev.conv1to5!=null?`<div class="compare-row ${last.conv1to5-prev.conv1to5>=0?'up':'down'}">${last.conv1to5-prev.conv1to5>=0?'▲':'▼'} ${Math.abs(round1(last.conv1to5-prev.conv1to5))}% к ${prev.month}</div>`:''}
+      </div>
+    </div>
+    <div style="margin-top:10px;font-size:12px;color:var(--text-secondary);">
+      Отсев: сами ${last.leftSelf!=null?last.leftSelf:'—'} · отказали ${last.refused!=null?last.refused:'—'} · перенесли ${last.transferred!=null?last.transferred:'—'}
+    </div>
+  </div>`;
 }
 
 function renderFunnelInto(elId, funnel){
-  const max = funnel[0].value || 1;
+  const max = (funnel[0] && funnel[0].value) || 1;
   let html = '';
   funnel.forEach((step,i)=>{
     const widthPct = Math.max(6, Math.round((step.value/max)*100));
     let dropText='';
-    if(i>0){ const prev=funnel[i-1].value; const drop = prev>0 ? Math.round((1-step.value/prev)*1000)/10 : 0; dropText='−'+drop+'%'; }
+    if(i>0){ const prev=funnel[i-1].value; const drop = prev>0 ? round1((1-step.value/prev)*100) : 0; dropText='−'+drop+'%'; }
     html += `<div class="funnel-row"><div class="funnel-label">${step.label}</div><div class="funnel-track"><div class="funnel-fill" style="width:${widthPct}%"><span>${step.value}</span></div></div><div class="funnel-drop">${dropText}</div></div>`;
   });
   el(elId).innerHTML = html;
@@ -387,18 +662,17 @@ function renderPieChart(canvasId, t){
   });
 }
 
-// ============ ПО ТРЕНЕРАМ ============
 function renderTrainersTab(data){
   let html = `<div id="panel-trainers" class="tab-panel">
     <div class="section">
-      <div class="section-head"><h2>Все тренеры</h2><div class="desc">клик по строке — подробная карточка</div></div>
+      <div class="section-head"><h2>Все тренеры</h2><div class="desc">взвеш. = final/day1 · ср.% = среднее по группам · клик — карточка</div></div>
       <div class="table-controls"><input type="text" id="trainerSearch" placeholder="Поиск по имени тренера..."></div>
       <div style="overflow-x:auto;"><table><thead><tr id="trainerHeadRow"></tr></thead><tbody id="trainerBody"></tbody></table></div>
     </div>
   </div>`;
   el('content').insertAdjacentHTML('beforeend', html);
   renderTrainerTable(data);
-  el('trainerSearch').addEventListener('input', ()=>renderTrainerTable(dashboardData));
+  el('trainerSearch').addEventListener('input', ()=>renderTrainerTable(viewData));
 }
 
 function renderTrainerTable(data){
@@ -407,11 +681,15 @@ function renderTrainerTable(data){
   if(search) trainers = trainers.filter(t=>t.name.toLowerCase().includes(search));
   trainers.sort((a,b)=>{
     let av=a[trainerSortState.key], bv=b[trainerSortState.key];
-    if(av===null) av=-1; if(bv===null) bv=-1;
-    if(typeof av==='string') return trainerSortState.dir==='asc'? av.localeCompare(bv): bv.localeCompare(av);
+    if(av===null||av===undefined) av=-1; if(bv===null||bv===undefined) bv=-1;
+    if(typeof av==='string') return trainerSortState.dir==='asc'? av.localeCompare(bv,'ru'): bv.localeCompare(av,'ru');
     return trainerSortState.dir==='asc'? av-bv : bv-av;
   });
-  const cols = [['name','Тренер'],['groups','Групп'],['day1','1-й день'],['leftSelf','Ушли сами'],['refused','Отказали'],['transferred','Перенесли'],['finalCount','Итог'],['conv1to5','Конв. 1→5'],['conv2','Конв. 2→5'],['conv3','Конв. 3→5']];
+  const cols = [
+    ['name','Тренер'],['groups','Групп'],['day1','1-й день'],
+    ['leftSelf','Ушли сами'],['refused','Отказали'],['transferred','Перенесли'],['finalCount','Итог'],
+    ['conv1to5Weighted','Конв. взвеш.'],['conv1to5','Конв. ср.%'],['conv2','Конв. 2→5'],['conv3','Конв. 3→5']
+  ];
   el('trainerHeadRow').innerHTML = cols.map(([key,label])=>{
     const arrow = trainerSortState.key===key ? (trainerSortState.dir==='asc'?' ↑':' ↓') : '';
     return `<th data-key="${key}">${label}${arrow}</th>`;
@@ -419,31 +697,35 @@ function renderTrainerTable(data){
   el('trainerBody').innerHTML = trainers.map(t=>`
     <tr data-trainer="${t.name}">
       <td>${t.name}</td><td>${t.groups}</td><td>${t.day1}</td><td>${t.leftSelf}</td><td>${t.refused}</td><td>${t.transferred}</td><td>${t.finalCount}</td>
-      <td><span class="badge ${pctBadgeClass(t.conv1to5,20,30)}">${t.conv1to5!==null?t.conv1to5+'%':'—'}</span></td>
-      <td>${t.conv2!==null?t.conv2+'%':'—'}</td><td>${t.conv3!==null?t.conv3+'%':'—'}</td>
+      <td><span class="badge ${pctBadgeClass(t.conv1to5Weighted)}">${t.conv1to5Weighted!=null?t.conv1to5Weighted+'%':'—'}</span></td>
+      <td>${t.conv1to5!=null?t.conv1to5+'%':'—'}</td>
+      <td>${t.conv2!=null?t.conv2+'%':'—'}</td><td>${t.conv3!=null?t.conv3+'%':'—'}</td>
     </tr>`).join('');
   document.querySelectorAll('#trainerHeadRow th').forEach(th=>th.addEventListener('click', ()=>{
     const key = th.dataset.key;
     if(trainerSortState.key===key) trainerSortState.dir = trainerSortState.dir==='asc'?'desc':'asc';
     else { trainerSortState.key=key; trainerSortState.dir='desc'; }
-    renderTrainerTable(dashboardData);
+    renderTrainerTable(viewData);
   }));
   document.querySelectorAll('#trainerBody tr').forEach(tr=>tr.addEventListener('click', ()=>openTrainerDetail(tr.dataset.trainer)));
 }
 
 function openTrainerDetail(name){
-  const data = dashboardData;
+  const data = viewData;
   const trainer = data.byTrainer.find(t=>t.name===name);
+  if(!trainer) return;
   const groups = data.groups.filter(g=>g.trainer===name);
   const overallConv = data.totals.conv1to5;
-  const diff = trainer.conv1to5!==null ? Math.round((trainer.conv1to5-overallConv)*10)/10 : null;
+  const tw = trainerConv(trainer);
+  const diff = tw!==null ? round1(tw-overallConv) : null;
 
   const byMonth = {};
   groups.forEach(g=>{
-    if(!byMonth[g.month]) byMonth[g.month] = {month:g.month, day1:0, finalCount:0, groups:0};
+    if(!byMonth[g.month]) byMonth[g.month] = {month:g.month, day1:0, finalCount:0, groups:0, leftSelf:0, refused:0, transferred:0};
     byMonth[g.month].day1 += g.day1; byMonth[g.month].finalCount += g.finalCount; byMonth[g.month].groups += 1;
+    byMonth[g.month].leftSelf += g.leftSelf; byMonth[g.month].refused += g.refused; byMonth[g.month].transferred += g.transferred;
   });
-  const monthTrend = Object.values(byMonth).map(m=>({month:m.month, conv1to5: m.day1>0? Math.round(m.finalCount/m.day1*1000)/10 : null}));
+  const monthTrend = Object.values(byMonth).map(m=>({month:m.month, conv1to5: m.day1>0? round1(m.finalCount/m.day1*100) : null, ...m}));
 
   const funnel = [
     {label:'1-й день', value: groups.reduce((s,g)=>s+g.day1,0)},
@@ -456,15 +738,26 @@ function openTrainerDetail(name){
     <div class="detail-head"><h2>${name}</h2><button class="close-btn" id="closeDetail">✕</button></div>
     <div class="mini-kpi-grid">
       <div class="mini-kpi"><div class="label">Групп проведено</div><div class="value">${trainer.groups}</div></div>
-      <div class="mini-kpi"><div class="label">Конв. 1→5</div><div class="value">${trainer.conv1to5!==null?trainer.conv1to5+'%':'—'}</div>
-        ${diff!==null ? `<div class="compare-row ${diff>=0?'up':'down'}">${diff>=0?'▲':'▼'} ${Math.abs(diff)}% к среднему</div>` : ''}</div>
+      <div class="mini-kpi"><div class="label">Конв. взвеш. 1→5</div><div class="value">${tw!=null?tw+'%':'—'}</div>
+        ${diff!==null ? `<div class="compare-row ${diff>=0?'up':'down'}">${diff>=0?'▲':'▼'} ${Math.abs(diff)}% к периоду</div>` : ''}
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">ср.% групп: ${trainer.conv1to5!=null?trainer.conv1to5+'%':'—'}</div>
+      </div>
       <div class="mini-kpi"><div class="label">Ушли сами</div><div class="value">${trainer.leftSelf}</div></div>
-      <div class="mini-kpi"><div class="label">Отказали мы</div><div class="value">${trainer.refused}</div></div>
+      <div class="mini-kpi"><div class="label">Отказали / перенесли</div><div class="value">${trainer.refused} / ${trainer.transferred}</div></div>
     </div>
     <div class="section-head"><h2>Воронка тренера</h2></div>
     <div class="funnel" id="trainerFunnel" style="margin-bottom:22px;"></div>
-    <div class="section-head"><h2>Динамика по месяцам</h2></div>
-    <div style="position:relative;height:180px;margin-bottom:10px;"><canvas id="trainerTrendChart"></canvas></div>
+    <div class="section-head"><h2>Динамика и отсев по месяцам</h2></div>
+    <div style="position:relative;height:180px;margin-bottom:12px;"><canvas id="trainerTrendChart"></canvas></div>
+    <table class="dropout-table">
+      <thead><tr><th>Месяц</th><th>Групп</th><th>Ушли</th><th>Отказали</th><th>Перенесли</th><th>Конв.</th></tr></thead>
+      <tbody>
+        ${monthTrend.map(m=>`<tr>
+          <td>${m.month}</td><td>${m.groups}</td><td>${m.leftSelf}</td><td>${m.refused}</td><td>${m.transferred}</td>
+          <td><span class="badge ${pctBadgeClass(m.conv1to5)}">${m.conv1to5!=null?m.conv1to5+'%':'—'}</span></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
   `;
   renderFunnelInto('trainerFunnel', funnel);
   destroyChart('trainerTrendChart');
@@ -481,56 +774,75 @@ function openTrainerDetail(name){
 function closeDetail(){ el('detailOverlay').classList.remove('open'); destroyChart('trainerTrendChart'); }
 el('detailOverlay').addEventListener('click', (e)=>{ if(e.target.id==='detailOverlay') closeDetail(); });
 
-// ============ ПО МЕСЯЦАМ ============
 function renderMonthsTab(data){
+  const months = data.periodFiltered ? data.byMonth : (dashboardData.byMonth || []);
   let html = `<div id="panel-months" class="tab-panel">
-    <div class="section"><div class="section-head"><h2>Месяцы обучения</h2><div class="desc">клик по карточке — подробности за месяц</div></div>
+    <div class="section"><div class="section-head"><h2>Месяцы обучения</h2><div class="desc">клик по карточке — подробности · показан отсев</div></div>
     <div class="month-grid" id="monthGrid"></div></div>
   </div>`;
   el('content').insertAdjacentHTML('beforeend', html);
-  el('monthGrid').innerHTML = data.byMonth.map(m=>`
+  el('monthGrid').innerHTML = months.map(m=>`
     <div class="month-card" data-month="${m.month}">
       <h3>${m.month}</h3>
       <div class="row"><span>Групп</span><b>${m.groups}</b></div>
-      <div class="row"><span>Конв. 1→5</span><b>${m.conv1to5!==null?m.conv1to5+'%':'—'}</b></div>
-    </div>`).join('');
+      <div class="row"><span>Конв. 1→5</span><b>${m.conv1to5!==null&&m.conv1to5!==undefined?m.conv1to5+'%':'—'}</b></div>
+      <div class="row"><span>Ушли сами</span><b>${m.leftSelf!=null?m.leftSelf:'—'}</b></div>
+      <div class="row"><span>Отказали</span><b>${m.refused!=null?m.refused:'—'}</b></div>
+      <div class="row"><span>Перенесли</span><b>${m.transferred!=null?m.transferred:'—'}</b></div>
+    </div>`).join('') || '<div style="color:var(--text-muted);font-size:13px;">Нет данных</div>';
   document.querySelectorAll('.month-card').forEach(c=>c.addEventListener('click', ()=>openMonthDetail(c.dataset.month)));
 }
 
 function openMonthDetail(month){
-  const data = dashboardData;
-  const groups = data.groups.filter(g=>g.month===month);
+  const sourceGroups = dashboardData.groups || [];
+  const groups = sourceGroups.filter(g=>g.month===month);
+  const monthRow = (dashboardData.byMonth||[]).find(m=>m.month===month);
   const day1 = groups.reduce((s,g)=>s+g.day1,0);
   const day2 = groups.reduce((s,g)=>s+g.day2Start,0);
   const day3 = groups.reduce((s,g)=>s+g.day3Start,0);
   const final = groups.reduce((s,g)=>s+g.finalCount,0);
   const leftSelf = groups.reduce((s,g)=>s+g.leftSelf,0);
   const refused = groups.reduce((s,g)=>s+g.refused,0);
-  const conv = day1>0 ? Math.round(final/day1*1000)/10 : 0;
+  const transferred = groups.reduce((s,g)=>s+g.transferred,0);
+  const conv = day1>0 ? round1(final/day1*100) : 0;
+  const months = dashboardData.byMonth || [];
+  const idx = months.findIndex(m=>m.month===month);
+  const prev = idx>0 ? months[idx-1] : null;
 
   const byTrainer = {};
   groups.forEach(g=>{
-    if(!byTrainer[g.trainer]) byTrainer[g.trainer] = {name:g.trainer, day1:0, finalCount:0, groups:0};
+    if(!byTrainer[g.trainer]) byTrainer[g.trainer] = {name:g.trainer, day1:0, finalCount:0, groups:0, leftSelf:0, refused:0, transferred:0};
     byTrainer[g.trainer].day1 += g.day1; byTrainer[g.trainer].finalCount += g.finalCount; byTrainer[g.trainer].groups += 1;
+    byTrainer[g.trainer].leftSelf += g.leftSelf; byTrainer[g.trainer].refused += g.refused; byTrainer[g.trainer].transferred += g.transferred;
   });
-  const trainerRows = Object.values(byTrainer).map(t=>({...t, conv: t.day1>0? Math.round(t.finalCount/t.day1*1000)/10 : null}))
+  const trainerRows = Object.values(byTrainer).map(t=>({...t, conv: t.day1>0? round1(t.finalCount/t.day1*100) : null}))
     .sort((a,b)=>(b.conv||0)-(a.conv||0));
 
   el('detailPanel').innerHTML = `
     <div class="detail-head"><h2>${month}</h2><button class="close-btn" id="closeDetail">✕</button></div>
     <div class="mini-kpi-grid">
-      <div class="mini-kpi"><div class="label">Групп</div><div class="value">${groups.length}</div></div>
-      <div class="mini-kpi"><div class="label">Конв. 1→5</div><div class="value">${conv}%</div></div>
+      <div class="mini-kpi"><div class="label">Групп</div><div class="value">${groups.length}</div>
+        ${prev?`<div class="compare-row ${groups.length-prev.groups>=0?'up':'down'}">${groups.length-prev.groups>=0?'▲':'▼'} ${Math.abs(groups.length-prev.groups)} к ${prev.month}</div>`:''}
+      </div>
+      <div class="mini-kpi"><div class="label">Конв. 1→5</div><div class="value">${conv}%</div>
+        ${prev&&prev.conv1to5!=null?`<div class="compare-row ${conv-prev.conv1to5>=0?'up':'down'}">${conv-prev.conv1to5>=0?'▲':'▼'} ${Math.abs(round1(conv-prev.conv1to5))}% к ${prev.month}</div>`:''}
+      </div>
       <div class="mini-kpi"><div class="label">Ушли сами</div><div class="value">${leftSelf}</div></div>
-      <div class="mini-kpi"><div class="label">Отказали мы</div><div class="value">${refused}</div></div>
+      <div class="mini-kpi"><div class="label">Отказали / перенесли</div><div class="value">${refused} / ${transferred}</div></div>
     </div>
     <div class="section-head"><h2>Воронка месяца</h2></div>
     <div class="funnel" id="monthFunnel" style="margin-bottom:22px;"></div>
     <div class="section-head"><h2>Тренеры в этом месяце</h2></div>
-    <div style="max-height:260px;overflow-y:auto;">
-      ${trainerRows.map(t=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-top:1px solid var(--border-soft);">
-        <span>${t.name} <span style="color:var(--text-muted);">(${t.groups} гр.)</span></span>
-        <span class="badge ${pctBadgeClass(t.conv,20,30)}">${t.conv!==null?t.conv+'%':'—'}</span></div>`).join('')}
+    <div style="max-height:280px;overflow-y:auto;">
+      <table class="dropout-table">
+        <thead><tr><th>Тренер</th><th>Гр.</th><th>Ушли</th><th>Отказали</th><th>Перенесли</th><th>Конв.</th></tr></thead>
+        <tbody>
+          ${trainerRows.map(t=>`<tr>
+            <td>${t.name}</td><td>${t.groups}</td><td>${t.leftSelf}</td><td>${t.refused}</td><td>${t.transferred}</td>
+            <td><span class="badge ${pctBadgeClass(t.conv)}">${t.conv!=null?t.conv+'%':'—'}</span></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
     </div>
   `;
   renderFunnelInto('monthFunnel', [

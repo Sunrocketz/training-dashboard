@@ -1,0 +1,15 @@
+---
+description: Правила для статического UI дашборда
+globs: index.html
+alwaysApply: false
+---
+
+# Frontend (`index.html`)
+
+- Один файл: правь точечно, сохраняй секции-комментарии.
+- Данные только из JSON API; см. `docs/ApiContract.md`.
+- Chart.js: `destroyChart` перед пересозданием.
+- Автообновление 08:00 МСК не ломать без обновления Runbook.
+- `DEFAULT_APPS_SCRIPT_URL` менять вместе с deployment ID в Runbook.
+- Не подключать фреймворки/сборщики без ADR.
+- Стили через CSS variables; не размазывать магические цвета по JS без нужды.
