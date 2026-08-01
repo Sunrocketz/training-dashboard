@@ -38,10 +38,14 @@
   }
   .title-block p{color:var(--text-secondary); font-size:14px; margin-top:4px;}
   .status-block{display:flex; flex-direction:column; align-items:flex-end; gap:8px;}
+  .status-actions{display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end;}
   .status-pill{
     display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-secondary);
     background:var(--surface); border:1px solid var(--border); border-radius:100px;
     padding:6px 14px; box-shadow:var(--shadow);
+  }
+  .data-updated{
+    font-size:12px; color:var(--text-muted); text-align:right; max-width:280px;
   }
   .dot{width:7px; height:7px; border-radius:50%; background:var(--text-muted); flex-shrink:0;}
   .dot.live{background:var(--success); box-shadow:0 0 0 3px var(--success-soft);}
@@ -142,6 +146,8 @@
   .detail-head .close-btn{background:var(--surface-2); border:none; border-radius:8px; width:32px; height:32px; cursor:pointer; font-size:16px; color:var(--text-secondary);}
   .detail-head .close-btn:hover{background:var(--surface-3);}
   .mini-kpi-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:20px;}
+  .mini-kpi-grid.cols-3{grid-template-columns:repeat(3,1fr);}
+  .detail-actions{display:flex; gap:8px; align-items:center;}
   .mini-kpi{background:var(--surface-2); border-radius:10px; padding:12px 14px;}
   .mini-kpi .label{font-size:11px; color:var(--text-muted);}
   .mini-kpi .value{font-family:var(--font-display); font-size:19px; font-weight:600; margin-top:2px;}
@@ -201,7 +207,11 @@
         <div class="dot" id="statusDot"></div>
         <span id="statusText">Не подключено</span>
       </div>
-      <button class="btn" id="refreshBtn">Обновить</button>
+      <div class="data-updated" id="dataUpdatedLabel">Данные API: —</div>
+      <div class="status-actions">
+        <button class="btn" id="exportCsvBtn" type="button" style="display:none;">Экспорт CSV</button>
+        <button class="btn" id="refreshBtn" type="button">Обновить</button>
+      </div>
     </div>
   </header>
 
@@ -251,6 +261,8 @@ let periodMonth = '';
 let refreshTimeout = null, refreshInterval = null;
 let trainerSortState = { key: 'conv1to5Weighted', dir: 'desc' };
 let tabsInited = false;
+let pendingDeepLink = null;
+let deepLinkApplied = false;
 const DAY_MS = 24*60*60*1000;
 const el = (id) => document.getElementById(id);
 let charts = {};
@@ -452,14 +464,145 @@ function fillPeriodSelect(raw){
   if(select.value !== current) periodMonth = '';
 }
 
+function readDeepLinkFromUrl(){
+  const p = new URLSearchParams(location.search);
+  return {
+    period: p.get('period') || '',
+    trainer: p.get('trainer') || '',
+    month: p.get('month') || '',
+    tab: p.get('tab') || ''
+  };
+}
+
+function syncUrl(extra={}){
+  const p = new URLSearchParams();
+  const period = extra.period !== undefined ? extra.period : periodMonth;
+  const tabBtn = document.querySelector('.tab-btn.active');
+  const tab = extra.tab !== undefined ? extra.tab : (tabBtn ? tabBtn.dataset.tab : '');
+  if(period) p.set('period', period);
+  if(tab && tab !== 'overview') p.set('tab', tab);
+  if(extra.trainer) p.set('trainer', extra.trainer);
+  if(extra.month) p.set('month', extra.month);
+  const qs = p.toString();
+  const next = qs ? `${location.pathname}?${qs}` : location.pathname;
+  history.replaceState(null, '', next);
+}
+
+function formatDataUpdated(iso){
+  if(!iso) return 'Данные API: —';
+  try{
+    const d = new Date(iso);
+    if(Number.isNaN(d.getTime())) return 'Данные API: ' + iso;
+    return 'Данные API: ' + d.toLocaleString('ru-RU', {
+      day:'2-digit', month:'2-digit', year:'numeric',
+      hour:'2-digit', minute:'2-digit'
+    });
+  }catch(_){
+    return 'Данные API: ' + iso;
+  }
+}
+
+function csvEscape(v){
+  const s = v==null ? '' : String(v);
+  if(/[;"\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function downloadCsv(filename, rows){
+  const body = rows.map(r=>r.map(csvEscape).join(';')).join('\r\n');
+  const blob = new Blob(['\uFEFF'+body], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function exportActiveTabCsv(){
+  if(!viewData || !dashboardData) return;
+  const tab = document.querySelector('.tab-btn.active')?.dataset.tab || 'overview';
+  const stamp = new Date().toISOString().slice(0,10);
+  if(tab === 'trainers'){
+    const rows = [['Тренер','Групп','1й день','Ушли сами','Отказали','Перенесли','Итог','Конв взвеш','Конв ср%','Конв 2→5','Конв 3→5']];
+    viewData.byTrainer.forEach(t=>rows.push([
+      t.name, t.groups, t.day1, t.leftSelf, t.refused, t.transferred, t.finalCount,
+      t.conv1to5Weighted, t.conv1to5, t.conv2, t.conv3
+    ]));
+    downloadCsv(`trainers_${stamp}.csv`, rows);
+    return;
+  }
+  if(tab === 'months'){
+    const months = viewData.periodFiltered ? viewData.byMonth : (dashboardData.byMonth||[]);
+    const rows = [['Месяц','Групп','1й день','Итог','Ушли сами','Отказали','Перенесли','Конв 1→5']];
+    months.forEach(m=>rows.push([
+      m.month, m.groups, m.day1, m.finalCount, m.leftSelf, m.refused, m.transferred, m.conv1to5
+    ]));
+    downloadCsv(`months_${stamp}.csv`, rows);
+    return;
+  }
+  const t = viewData.totals;
+  const rows = [
+    ['Показатель','Значение'],
+    ['Период', periodMonth || 'Все месяцы'],
+    ['Групп', t.groups],
+    ['Конв 1→5 взвеш %', t.conv1to5],
+    ['1й день', t.day1],
+    ['Выход на линию', t.finalCount],
+    ['Ушли сами', t.leftSelf],
+    ['Отказали', t.refused],
+    ['Перенесли', t.transferred],
+    [],
+    ['Месяц','Групп','Ушли сами','Отказали','Перенесли','Конв 1→5']
+  ];
+  (dashboardData.byMonth||[]).forEach(m=>rows.push([
+    m.month, m.groups, m.leftSelf, m.refused, m.transferred, m.conv1to5
+  ]));
+  downloadCsv(`overview_${stamp}.csv`, rows);
+}
+
+function activateTab(tab){
+  if(!tab) return;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+tab));
+}
+
+function applyPendingDeepLink(){
+  if(deepLinkApplied || !pendingDeepLink || !dashboardData) return;
+  const link = pendingDeepLink;
+  deepLinkApplied = true;
+  if(link.period){
+    const exists = (dashboardData.byMonth||[]).some(m=>m.month===link.period);
+    if(exists) periodMonth = link.period;
+  }
+  viewData = buildViewData(dashboardData, periodMonth);
+  fillPeriodSelect(dashboardData);
+  renderOverview(viewData);
+  renderTrainersTab(viewData);
+  renderMonthsTab(viewData);
+  const tab = link.tab || (link.trainer ? 'trainers' : link.month ? 'months' : 'overview');
+  activateTab(tab);
+  initTabsOnce();
+  syncUrl({ period: periodMonth, tab, trainer: link.trainer || '', month: link.month || '' });
+  if(link.trainer){
+    const found = viewData.byTrainer.find(t=>t.name===link.trainer)
+      || viewData.byTrainer.find(t=>t.name.toLowerCase()===link.trainer.toLowerCase());
+    if(found) openTrainerDetail(found.name, {skipUrl:true});
+  } else if(link.month){
+    const exists = (dashboardData.byMonth||[]).some(m=>m.month===link.month);
+    if(exists) openMonthDetail(link.month, {skipUrl:true});
+  }
+}
+
 function renderAll(){
   if(!dashboardData) return;
   viewData = buildViewData(dashboardData, periodMonth);
   const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab || 'overview';
   el('tabs').style.display = 'flex';
   el('toolbar').style.display = 'flex';
+  el('exportCsvBtn').style.display = '';
   fillPeriodSelect(dashboardData);
   renderBadgeLegend();
+  el('dataUpdatedLabel').textContent = formatDataUpdated(dashboardData.updatedAt);
   const hint = el('periodHint');
   if(periodMonth){
     hint.textContent = `Показаны valid-группы за «${periodMonth}». «Не собралась/распалась» в фильтре недоступны.`;
@@ -469,9 +612,10 @@ function renderAll(){
   renderOverview(viewData);
   renderTrainersTab(viewData);
   renderMonthsTab(viewData);
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===activeTab));
-  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+activeTab));
+  activateTab(activeTab);
   initTabsOnce();
+  if(!deepLinkApplied && pendingDeepLink) applyPendingDeepLink();
+  else syncUrl({ period: periodMonth, tab: activeTab });
 }
 
 async function fetchData(url){
@@ -498,10 +642,15 @@ el('connectBtn').addEventListener('click', () => {
 el('refreshBtn').addEventListener('click', () => {
   const url = el('urlInput').value.trim(); if(url) fetchData(url);
 });
+el('exportCsvBtn').addEventListener('click', exportActiveTabCsv);
 el('periodSelect').addEventListener('change', () => {
   periodMonth = el('periodSelect').value;
+  deepLinkApplied = true;
+  if(el('detailOverlay').classList.contains('open')) closeDetail();
   renderAll();
 });
+pendingDeepLink = readDeepLinkFromUrl();
+if(pendingDeepLink.period) periodMonth = pendingDeepLink.period;
 if(DEFAULT_APPS_SCRIPT_URL){
   el('urlInput').value = DEFAULT_APPS_SCRIPT_URL;
   el('config').style.display = 'none';
@@ -519,6 +668,7 @@ function initTabsOnce(){
       btn.classList.add('active');
       const panel = el('panel-'+btn.dataset.tab);
       if(panel) panel.classList.add('active');
+      syncUrl({ tab: btn.dataset.tab });
     });
   });
 }
@@ -710,7 +860,7 @@ function renderTrainerTable(data){
   document.querySelectorAll('#trainerBody tr').forEach(tr=>tr.addEventListener('click', ()=>openTrainerDetail(tr.dataset.trainer)));
 }
 
-function openTrainerDetail(name){
+function openTrainerDetail(name, opts={}){
   const data = viewData;
   const trainer = data.byTrainer.find(t=>t.name===name);
   if(!trainer) return;
@@ -735,25 +885,37 @@ function openTrainerDetail(name){
   ];
 
   el('detailPanel').innerHTML = `
-    <div class="detail-head"><h2>${name}</h2><button class="close-btn" id="closeDetail">✕</button></div>
+    <div class="detail-head">
+      <h2>${name}</h2>
+      <div class="detail-actions">
+        <button class="btn" id="copyTrainerLink" type="button">Ссылка</button>
+        <button class="close-btn" id="closeDetail" type="button">✕</button>
+      </div>
+    </div>
     <div class="mini-kpi-grid">
       <div class="mini-kpi"><div class="label">Групп проведено</div><div class="value">${trainer.groups}</div></div>
       <div class="mini-kpi"><div class="label">Конв. взвеш. 1→5</div><div class="value">${tw!=null?tw+'%':'—'}</div>
         ${diff!==null ? `<div class="compare-row ${diff>=0?'up':'down'}">${diff>=0?'▲':'▼'} ${Math.abs(diff)}% к периоду</div>` : ''}
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">ср.% групп: ${trainer.conv1to5!=null?trainer.conv1to5+'%':'—'}</div>
       </div>
+      <div class="mini-kpi"><div class="label">1-й день → выход</div><div class="value">${trainer.day1} → ${trainer.finalCount}</div></div>
       <div class="mini-kpi"><div class="label">Ушли сами</div><div class="value">${trainer.leftSelf}</div></div>
-      <div class="mini-kpi"><div class="label">Отказали / перенесли</div><div class="value">${trainer.refused} / ${trainer.transferred}</div></div>
     </div>
+    <div class="mini-kpi-grid cols-3" style="margin-top:-8px;">
+      <div class="mini-kpi"><div class="label">Отказали / перенесли</div><div class="value">${trainer.refused} / ${trainer.transferred}</div></div>
+      <div class="mini-kpi"><div class="label">Конв. 2→5</div><div class="value">${trainer.conv2!=null?trainer.conv2+'%':'—'}</div></div>
+      <div class="mini-kpi"><div class="label">Конв. 3→5</div><div class="value">${trainer.conv3!=null?trainer.conv3+'%':'—'}</div></div>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin:-6px 0 14px;">В карточке — все агрегаты API по valid-группам тренера${periodMonth?` за «${periodMonth}»`:''}. «Не собралась/распалась» по тренеру в API нет.</div>
     <div class="section-head"><h2>Воронка тренера</h2></div>
     <div class="funnel" id="trainerFunnel" style="margin-bottom:22px;"></div>
     <div class="section-head"><h2>Динамика и отсев по месяцам</h2></div>
     <div style="position:relative;height:180px;margin-bottom:12px;"><canvas id="trainerTrendChart"></canvas></div>
     <table class="dropout-table">
-      <thead><tr><th>Месяц</th><th>Групп</th><th>Ушли</th><th>Отказали</th><th>Перенесли</th><th>Конв.</th></tr></thead>
+      <thead><tr><th>Месяц</th><th>Групп</th><th>1-й день</th><th>Итог</th><th>Ушли</th><th>Отказали</th><th>Перенесли</th><th>Конв.</th></tr></thead>
       <tbody>
         ${monthTrend.map(m=>`<tr>
-          <td>${m.month}</td><td>${m.groups}</td><td>${m.leftSelf}</td><td>${m.refused}</td><td>${m.transferred}</td>
+          <td>${m.month}</td><td>${m.groups}</td><td>${m.day1}</td><td>${m.finalCount}</td><td>${m.leftSelf}</td><td>${m.refused}</td><td>${m.transferred}</td>
           <td><span class="badge ${pctBadgeClass(m.conv1to5)}">${m.conv1to5!=null?m.conv1to5+'%':'—'}</span></td>
         </tr>`).join('')}
       </tbody>
@@ -769,9 +931,25 @@ function openTrainerDetail(name){
   });
   el('detailOverlay').classList.add('open');
   el('closeDetail').addEventListener('click', closeDetail);
+  el('copyTrainerLink').addEventListener('click', async ()=>{
+    syncUrl({ trainer: name, tab: 'trainers', month: '' });
+    try{
+      await navigator.clipboard.writeText(location.href);
+      el('copyTrainerLink').textContent = 'Скопировано';
+      setTimeout(()=>{ if(el('copyTrainerLink')) el('copyTrainerLink').textContent = 'Ссылка'; }, 1500);
+    }catch(_){
+      prompt('Скопируй ссылку:', location.href);
+    }
+  });
+  if(!opts.skipUrl) syncUrl({ trainer: name, tab: 'trainers', month: '' });
 }
 
-function closeDetail(){ el('detailOverlay').classList.remove('open'); destroyChart('trainerTrendChart'); }
+function closeDetail(){
+  el('detailOverlay').classList.remove('open');
+  destroyChart('trainerTrendChart');
+  const tab = document.querySelector('.tab-btn.active')?.dataset.tab || 'overview';
+  syncUrl({ tab, trainer: '', month: '' });
+}
 el('detailOverlay').addEventListener('click', (e)=>{ if(e.target.id==='detailOverlay') closeDetail(); });
 
 function renderMonthsTab(data){
@@ -793,10 +971,9 @@ function renderMonthsTab(data){
   document.querySelectorAll('.month-card').forEach(c=>c.addEventListener('click', ()=>openMonthDetail(c.dataset.month)));
 }
 
-function openMonthDetail(month){
+function openMonthDetail(month, opts={}){
   const sourceGroups = dashboardData.groups || [];
   const groups = sourceGroups.filter(g=>g.month===month);
-  const monthRow = (dashboardData.byMonth||[]).find(m=>m.month===month);
   const day1 = groups.reduce((s,g)=>s+g.day1,0);
   const day2 = groups.reduce((s,g)=>s+g.day2Start,0);
   const day3 = groups.reduce((s,g)=>s+g.day3Start,0);
@@ -819,7 +996,13 @@ function openMonthDetail(month){
     .sort((a,b)=>(b.conv||0)-(a.conv||0));
 
   el('detailPanel').innerHTML = `
-    <div class="detail-head"><h2>${month}</h2><button class="close-btn" id="closeDetail">✕</button></div>
+    <div class="detail-head">
+      <h2>${month}</h2>
+      <div class="detail-actions">
+        <button class="btn" id="copyMonthLink" type="button">Ссылка</button>
+        <button class="close-btn" id="closeDetail" type="button">✕</button>
+      </div>
+    </div>
     <div class="mini-kpi-grid">
       <div class="mini-kpi"><div class="label">Групп</div><div class="value">${groups.length}</div>
         ${prev?`<div class="compare-row ${groups.length-prev.groups>=0?'up':'down'}">${groups.length-prev.groups>=0?'▲':'▼'} ${Math.abs(groups.length-prev.groups)} к ${prev.month}</div>`:''}
@@ -850,6 +1033,17 @@ function openMonthDetail(month){
   ]);
   el('detailOverlay').classList.add('open');
   el('closeDetail').addEventListener('click', closeDetail);
+  el('copyMonthLink').addEventListener('click', async ()=>{
+    syncUrl({ month, tab: 'months', trainer: '' });
+    try{
+      await navigator.clipboard.writeText(location.href);
+      el('copyMonthLink').textContent = 'Скопировано';
+      setTimeout(()=>{ if(el('copyMonthLink')) el('copyMonthLink').textContent = 'Ссылка'; }, 1500);
+    }catch(_){
+      prompt('Скопируй ссылку:', location.href);
+    }
+  });
+  if(!opts.skipUrl) syncUrl({ month, tab: 'months', trainer: '' });
 }
 </script>
 </body>

@@ -27,6 +27,8 @@ training-dashboard/
 | Auto-refresh | Расписание 08:00 МСК | Менять данные на сервере |
 | Overview tab | KPI+MoM, воронка, отсев, тренд, таблица отсева по месяцам, топ тренеров | Ломать взвешенную/среднюю формулы без ApiContract |
 | Toolbar | Фильтр месяца, легенда порогов | Серверная фильтрация (её нет) |
+| Deep-link | `?period=&trainer=&month=&tab=` + кнопка «Ссылка» | Ломать shareable URL без docs |
+| CSV export | Кнопка выгрузки активной вкладки | Серверный экспорт |
 | Trainers tab | Таблица, сортировка, поиск, detail | Писать в Sheets |
 | Months tab | Карточки месяцев, detail | Менять контракт |
 | Charts | Chart.js lifecycle (`destroyChart`) | Утекать инстансы чартов |
