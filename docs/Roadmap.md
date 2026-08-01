@@ -9,7 +9,7 @@
 | N1 | Пакет docs + Cursor rules + AGENTS | done | Снять архитектурный долг «всё в голове» |
 | N2 | Закоммитить `apps-script/` в git | done | Backend в том же репо, что и UI |
 | N3 | Проверить Netlify ↔ `main` после первых пушей из Cursor | done | Git linked |
-| N4 | Смоук-чек: UI грузит актуальный `/exec` | done | schemaVersion 2 на проде |
+| N4 | Смоук-чек: UI грузит актуальный `/exec` | done | schemaVersion 3 на проде |
 
 ## Next — качество без большого рефакторинга
 
@@ -19,6 +19,7 @@
 | OC2 | Deep-link + CSV + заметный updatedAt + полнее карточка тренера | done | Шаринг, выгрузка, прозрачность данных |
 | OC3 | Ясность периода + типографическая иерархия UI | done | Убрать путаницу «вся сумма» vs «к июню» |
 | OC4 | Ускорение загрузки: GAS cache + local cache | done | Меньше ожидания белого экрана |
+| OC5 | «Распалась» в valid + метка/метрики/аналитика (schemaVersion 3) | done | Согласовать счёт групп с листом; сигнал распада |
 | X1 | Вынести DEFAULT URL / конфиг UI в одно место + комментарий в Runbook | todo | Меньше рассинхрона при смене deployment |
 | X2 | Добавить в JSON поле `schemaVersion` (non-breaking) | done | Вошло в OC1 (`schemaVersion: 2`) |
 | X3 | Фича-флаги UI только через данные, не через копипаст формул | todo | Частично: пороги в `metrics` |

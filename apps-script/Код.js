@@ -37,7 +37,7 @@ var DASHBOARD_SHEET_NAME = 'Дашборд';               // название �
 var DATA_START_ROW = 1;   // с какой строки начинать чтение
 var DATA_END_ROW = 500;   // до какой строки читать (с запасом)
 var LAST_COLUMN = 'R';    // последняя колонка с данными
-var API_CACHE_KEY = 'dashboard_json_v2';
+var API_CACHE_KEY = 'dashboard_json_v3';
 var API_CACHE_TTL_SEC = 300; // 5 минут — повторные открытия дашборда без пересчёта листа
 // =================================================================
 
@@ -70,6 +70,7 @@ function collectDashboardData() {
   var range = sourceSheet.getRange('A' + DATA_START_ROW + ':' + LAST_COLUMN + endRow);
   var values = range.getValues();
 
+  // validEntry = { row, fellApart }; «не собралась» исключаем, «распалась» — в valid с меткой
   var validGroups = [];
   var notGathered = 0;
   var fellApart = 0;
@@ -82,26 +83,33 @@ function collectDashboardData() {
     var comment = String(row[COL.comment] || '').toLowerCase();
     if (comment.indexOf('не собралась') !== -1) {
       notGathered++;
-    } else if (comment.indexOf('распалась') !== -1) {
-      fellApart++;
-    } else {
-      validGroups.push(row);
+      continue;
     }
+    var isFellApart = comment.indexOf('распалась') !== -1;
+    if (isFellApart) fellApart++;
+    validGroups.push({ row: row, fellApart: isFellApart });
   }
 
   // ---- по тренерам ----
   var byTrainer = {};
-  validGroups.forEach(function(row) {
+  validGroups.forEach(function(entry) {
+    var row = entry.row;
     var trainer = normalizeName(row[COL.trainer]);
     if (!byTrainer[trainer]) {
       byTrainer[trainer] = {
-        name: trainer, groups: 0, day1Total: 0, leftSelf: 0, refused: 0,
-        transferred: 0, finalCount: 0, conv1to5Sum: 0, conv2Sum: 0, conv3Sum: 0,
+        name: trainer, groups: 0, fellApart: 0, day1Total: 0, leftSelf: 0, refused: 0,
+        transferred: 0, finalCount: 0, fellApartDay1: 0, fellApartFinal: 0,
+        conv1to5Sum: 0, conv2Sum: 0, conv3Sum: 0,
         conv2Count: 0, conv3Count: 0
       };
     }
     var t = byTrainer[trainer];
     t.groups += 1;
+    if (entry.fellApart) {
+      t.fellApart += 1;
+      t.fellApartDay1 += Number(row[COL.day1]) || 0;
+      t.fellApartFinal += Number(row[COL.finalCount]) || 0;
+    }
     t.day1Total += Number(row[COL.day1]) || 0;
     t.leftSelf += Number(row[COL.leftSelf]) || 0;
     t.refused += Number(row[COL.refused]) || 0;
@@ -121,6 +129,7 @@ function collectDashboardData() {
     return {
       name: t.name,
       groups: t.groups,
+      fellApart: t.fellApart,
       day1: t.day1Total,
       leftSelf: t.leftSelf,
       refused: t.refused,
@@ -130,6 +139,7 @@ function collectDashboardData() {
       conv1to5: t.groups > 0 ? round1(t.conv1to5Sum / t.groups * 100) : null,
       // взвешенная конверсия: сумма final / сумма day1 (как totals.conv1to5)
       conv1to5Weighted: t.day1Total > 0 ? round1(t.finalCount / t.day1Total * 100) : null,
+      fellApartConv1to5: t.fellApartDay1 > 0 ? round1(t.fellApartFinal / t.fellApartDay1 * 100) : null,
       conv2: t.conv2Count > 0 ? round1(t.conv2Sum / t.conv2Count * 100) : null,
       conv3: t.conv3Count > 0 ? round1(t.conv3Sum / t.conv3Count * 100) : null
     };
@@ -138,17 +148,24 @@ function collectDashboardData() {
   // ---- по месяцам (для тренда + отсев) ----
   var byMonth = {};
   var monthOrder = [];
-  validGroups.forEach(function(row) {
+  validGroups.forEach(function(entry) {
+    var row = entry.row;
     var label = String(row[COL.monthGroup] || '');
     var month = label.split(',')[0].trim() || 'Без месяца';
     if (!byMonth[month]) {
       byMonth[month] = {
-        month: month, groups: 0, day1Total: 0, finalCount: 0,
-        leftSelf: 0, refused: 0, transferred: 0
+        month: month, groups: 0, fellApart: 0, day1Total: 0, finalCount: 0,
+        leftSelf: 0, refused: 0, transferred: 0,
+        fellApartDay1: 0, fellApartFinal: 0
       };
       monthOrder.push(month);
     }
     byMonth[month].groups += 1;
+    if (entry.fellApart) {
+      byMonth[month].fellApart += 1;
+      byMonth[month].fellApartDay1 += Number(row[COL.day1]) || 0;
+      byMonth[month].fellApartFinal += Number(row[COL.finalCount]) || 0;
+    }
     byMonth[month].day1Total += Number(row[COL.day1]) || 0;
     byMonth[month].finalCount += Number(row[COL.finalCount]) || 0;
     byMonth[month].leftSelf += Number(row[COL.leftSelf]) || 0;
@@ -160,16 +177,19 @@ function collectDashboardData() {
     return {
       month: d.month,
       groups: d.groups,
+      fellApart: d.fellApart,
       day1: d.day1Total,
       finalCount: d.finalCount,
       leftSelf: d.leftSelf,
       refused: d.refused,
       transferred: d.transferred,
-      conv1to5: d.day1Total > 0 ? round1(d.finalCount / d.day1Total * 100) : null
+      conv1to5: d.day1Total > 0 ? round1(d.finalCount / d.day1Total * 100) : null,
+      fellApartConv1to5: d.fellApartDay1 > 0 ? round1(d.fellApartFinal / d.fellApartDay1 * 100) : null
     };
   });
 
-  var groupList = validGroups.map(function(row) {
+  var groupList = validGroups.map(function(entry) {
+    var row = entry.row;
     var label = String(row[COL.monthGroup] || '');
     var month = label.split(',')[0].trim() || 'Без месяца';
     return {
@@ -178,6 +198,7 @@ function collectDashboardData() {
       trainer: normalizeName(row[COL.trainer]),
       startDate: row[COL.startDate] instanceof Date
         ? Utilities.formatDate(row[COL.startDate], Session.getScriptTimeZone(), 'yyyy-MM-dd') : null,
+      fellApart: !!entry.fellApart,
       day1: Number(row[COL.day1]) || 0,
       leftSelf: Number(row[COL.leftSelf]) || 0,
       refused: Number(row[COL.refused]) || 0,
@@ -193,22 +214,29 @@ function collectDashboardData() {
 
   // ---- общие итоги ----
   var totalGroups = validGroups.length;
-  var totalDay1 = sumColumn(validGroups, COL.day1);
-  var totalDay2Start = sumColumn(validGroups, COL.day2Start);
-  var totalDay3Start = sumColumn(validGroups, COL.day3Start);
-  var totalLeftSelf = sumColumn(validGroups, COL.leftSelf);
-  var totalRefused = sumColumn(validGroups, COL.refused);
-  var totalTransferred = sumColumn(validGroups, COL.transferred);
-  var totalFinal = sumColumn(validGroups, COL.finalCount);
+  var totalDay1 = sumEntryColumn(validGroups, COL.day1);
+  var totalDay2Start = sumEntryColumn(validGroups, COL.day2Start);
+  var totalDay3Start = sumEntryColumn(validGroups, COL.day3Start);
+  var totalLeftSelf = sumEntryColumn(validGroups, COL.leftSelf);
+  var totalRefused = sumEntryColumn(validGroups, COL.refused);
+  var totalTransferred = sumEntryColumn(validGroups, COL.transferred);
+  var totalFinal = sumEntryColumn(validGroups, COL.finalCount);
   var overallConv1to5 = totalDay1 > 0 ? round1(totalFinal / totalDay1 * 100) : 0;
 
+  var fellApartEntries = validGroups.filter(function(e) { return e.fellApart; });
+  var fellApartDay1 = sumEntryColumn(fellApartEntries, COL.day1);
+  var fellApartFinal = sumEntryColumn(fellApartEntries, COL.finalCount);
+  var fellApartConv1to5 = fellApartDay1 > 0 ? round1(fellApartFinal / fellApartDay1 * 100) : null;
+  var fellApartShare = totalGroups > 0 ? round1(fellApart / totalGroups * 100) : 0;
+
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     updatedAt: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss"),
     metrics: {
       conv1to5Totals: 'weighted',      // finalSum / day1Sum
       conv1to5ByTrainer: 'avgGroups',  // среднее % групп; см. также conv1to5Weighted
       conv1to5ByMonth: 'weighted',
+      fellApartInValid: true,          // «распалась» входит в valid + метка
       badgeLow: 20,
       badgeHigh: 30,
       planConv1to5: 30
@@ -217,6 +245,10 @@ function collectDashboardData() {
       groups: totalGroups,
       notGathered: notGathered,
       fellApart: fellApart,
+      fellApartDay1: fellApartDay1,
+      fellApartFinalCount: fellApartFinal,
+      fellApartConv1to5: fellApartConv1to5,
+      fellApartShare: fellApartShare,
       day1: totalDay1,
       day2Start: totalDay2Start,
       day3Start: totalDay3Start,
@@ -258,9 +290,11 @@ function buildDashboard() {
 
   var t = data.totals;
   var summaryRows = [
-    ['Всего групп (учтено в конверсиях)', t.groups],
-    ['Групп не собралось', t.notGathered],
-    ['Групп распалось', t.fellApart],
+    ['Всего групп (учтено в конверсиях, вкл. распавшиеся)', t.groups],
+    ['Групп не собралось (не в расчёте)', t.notGathered],
+    ['Групп распалось (в расчёте, с меткой)', t.fellApart],
+    ['Доля распавшихся от учтённых', (t.fellApartShare != null ? t.fellApartShare : 0) + '%'],
+    ['Конверсия 1→5 у распавшихся', t.fellApartConv1to5 != null ? t.fellApartConv1to5 + '%' : '—'],
     ['Вышло на 1-й день (всего)', t.day1],
     ['Ушли сами (всего)', t.leftSelf],
     ['Отказали мы (всего)', t.refused],
@@ -274,12 +308,12 @@ function buildDashboard() {
   var tableStartRow = 4 + summaryRows.length + 3;
   dash.getRange(tableStartRow, 1).setValue('ПО ТРЕНЕРАМ').setFontWeight('bold').setFontSize(13);
 
-  var trainerHeaders = ['Тренер', 'Групп', 'Вышло 1 день', 'Ушли сами', 'Отказали мы', 'Перенесли', 'Итог выход', 'Конв. 1→5', 'Конв. 2→5', 'Конв. 3→5'];
+  var trainerHeaders = ['Тренер', 'Групп', 'Распалось', 'Вышло 1 день', 'Ушли сами', 'Отказали мы', 'Перенесли', 'Итог выход', 'Конв. 1→5', 'Конв. 2→5', 'Конв. 3→5'];
   var headerRow = tableStartRow + 1;
   dash.getRange(headerRow, 1, 1, trainerHeaders.length).setValues([trainerHeaders]).setFontWeight('bold').setBackground('#d9d9d9');
 
   var trainerRows = data.byTrainer.map(function(tr) {
-    return [tr.name, tr.groups, tr.day1, tr.leftSelf, tr.refused, tr.transferred, tr.finalCount,
+    return [tr.name, tr.groups, tr.fellApart || 0, tr.day1, tr.leftSelf, tr.refused, tr.transferred, tr.finalCount,
       tr.conv1to5 !== null ? tr.conv1to5 + '%' : '',
       tr.conv2 !== null ? tr.conv2 + '%' : '',
       tr.conv3 !== null ? tr.conv3 + '%' : ''];
@@ -292,19 +326,19 @@ function buildDashboard() {
   var chart1 = dash.newChart()
     .setChartType(Charts.ChartType.COLUMN)
     .addRange(dash.getRange(headerRow, 1, trainerRows.length + 1, 1))
-    .addRange(dash.getRange(headerRow, 7, trainerRows.length + 1, 1))
+    .addRange(dash.getRange(headerRow, 8, trainerRows.length + 1, 1))
     .setPosition(headerRow, trainerHeaders.length + 2, 0, 0)
     .setOption('title', 'Итоговый выход на линию по тренерам')
     .setOption('width', 600).setOption('height', 350)
     .build();
   dash.insertChart(chart1);
 
-  dash.getRange(tableStartRow - 2, 12, 3, 2).setValues([
+  dash.getRange(tableStartRow - 2, 13, 3, 2).setValues([
     ['Ушли сами', t.leftSelf], ['Отказали мы', t.refused], ['Перенесли', t.transferred]
   ]);
   var chart2 = dash.newChart()
     .setChartType(Charts.ChartType.PIE)
-    .addRange(dash.getRange(tableStartRow - 2, 12, 3, 2))
+    .addRange(dash.getRange(tableStartRow - 2, 13, 3, 2))
     .setPosition(headerRow, trainerHeaders.length + 2, 20, 0)
     .setOption('title', 'Структура отсева (всего)')
     .setOption('width', 600).setOption('height', 350)
@@ -362,6 +396,12 @@ function normalizeName(value) {
 
 function sumColumn(rows, colIndex) {
   return rows.reduce(function(sum, row) { return sum + (Number(row[colIndex]) || 0); }, 0);
+}
+
+function sumEntryColumn(entries, colIndex) {
+  return entries.reduce(function(sum, entry) {
+    return sum + (Number(entry.row[colIndex]) || 0);
+  }, 0);
 }
 
 function parsePercent(value) {

@@ -34,11 +34,12 @@
 ## Классификация строк
 
 1. Нет валидной даты в `startDate` → строка игнорируется полностью.
-2. `comment` содержит «не собралась» (case-insensitive) → счётчик `notGathered`, не в valid.
-3. `comment` содержит «распалась» → `fellApart`, не в valid.
-4. Иначе → `validGroups` (участвует в конверсиях и списках).
+2. `comment` содержит «не собралась» (case-insensitive) → счётчик `notGathered`, **не** в valid.
+3. Иначе → `validGroups` (участвует в конверсиях и списках). Если `comment` содержит «распалась» — группа **входит** в valid с меткой `fellApart: true` и увеличивает счётчик `fellApart`.
 
-Порядок проверки: сначала «не собралась», затем «распалась».
+Порядок проверки: сначала «не собралась» (исключение), затем флаг «распалась» внутри valid.
+
+Смысл: «не собралась» — группа не состоялась; «распалась» — старт был, цифры воронки реальные, нагрузка тренера учитывается (ADR-011).
 
 ## Нормализация имени тренера
 
@@ -62,11 +63,11 @@
 
 | Сущность | Как строится |
 |----------|--------------|
-| `byTrainer` | group-by нормализованный тренер по valid; `conv1to5` = ср.% групп, `conv1to5Weighted` = final/day1 |
-| `byMonth` | group-by `month`; суммы day1/final/отсев + взвешенная conv |
-| `groups` | map valid → GroupRow |
-| `totals` / `funnel` | суммы по valid (+ счётчики отфильтрованных) |
-| `metrics` | пороги бейджей и описание формул для UI |
+| `byTrainer` | group-by нормализованный тренер по valid; `fellApart` / `fellApartConv1to5`; `conv1to5` = ср.% групп, `conv1to5Weighted` = final/day1 |
+| `byMonth` | group-by `month`; суммы day1/final/отсев + `fellApart` + взвешенные conv |
+| `groups` | map valid → GroupRow (`fellApart` boolean) |
+| `totals` / `funnel` | суммы по valid; `notGathered` вне valid; метрики распада (`fellApart*`) |
+| `metrics` | пороги бейджей, `fellApartInValid`, формулы для UI |
 
 ## Лист-результат
 

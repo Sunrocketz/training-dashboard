@@ -111,7 +111,7 @@
     font-size:var(--fs-meta); color:var(--text-muted); max-width:260px; text-align:right; line-height:1.4;
   }
 
-  .kpi-grid{display:grid; grid-template-columns:repeat(5, 1fr); gap:12px; margin-bottom:20px;}
+  .kpi-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-bottom:20px;}
   .kpi-card{
     background:var(--surface); border:1px solid var(--border); border-radius:12px;
     padding:14px 16px 12px; box-shadow:var(--shadow);
@@ -133,6 +133,7 @@
   .kpi-card.accent .value{color:var(--accent);}
   .kpi-card.success .value{color:var(--success);}
   .kpi-card.danger .value{color:var(--danger);}
+  .kpi-card.warning .value{color:var(--warning);}
   .kpi-card .delta{
     margin-top:auto; padding-top:8px; border-top:1px solid var(--border-soft);
     font-size:11px; font-family:var(--font-body); font-weight:600; line-height:1.35;
@@ -177,6 +178,7 @@
   .badge.success{background:var(--success-soft); color:var(--success);}
   .badge.warning{background:var(--warning-soft); color:var(--warning);}
   .badge.danger{background:var(--danger-soft); color:var(--danger);}
+  .badge.neutral{background:var(--surface-3); color:var(--text-secondary);}
 
   .placeholder{display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px 20px; color:var(--text-muted); text-align:center; gap:10px;}
   .placeholder .big{font-size:15px; color:var(--text-secondary);}
@@ -383,6 +385,7 @@ function renderBadgeLegend(){
     <span class="badge success">≥${m.badgeHigh}% хорошо</span>
     <span class="badge warning">${m.badgeLow}–${m.badgeHigh-0.1}% средне</span>
     <span class="badge danger"><${m.badgeLow}% низко</span>
+    <span class="badge neutral">распалась</span>
     <span style="color:var(--text-muted);">план ${m.planConv1to5}%</span>
   `;
 }
@@ -395,17 +398,25 @@ function aggregateFromGroups(groups, raw){
   const refused = sumField(groups,'refused');
   const transferred = sumField(groups,'transferred');
   const finalCount = sumField(groups,'finalCount');
+  const fellGroups = groups.filter(g=>g.fellApart);
+  const fellApart = fellGroups.length;
+  const fellApartDay1 = sumField(fellGroups,'day1');
+  const fellApartFinalCount = sumField(fellGroups,'finalCount');
+  const fellApartConv1to5 = fellApartDay1>0 ? round1(fellApartFinalCount/fellApartDay1*100) : null;
+  const fellApartShare = groups.length>0 ? round1(fellApart/groups.length*100) : 0;
 
   const byTrainerMap = {};
   groups.forEach(g=>{
     if(!byTrainerMap[g.trainer]){
       byTrainerMap[g.trainer] = {
-        name:g.trainer, groups:0, day1:0, leftSelf:0, refused:0, transferred:0, finalCount:0,
+        name:g.trainer, groups:0, fellApart:0, day1:0, leftSelf:0, refused:0, transferred:0, finalCount:0,
+        fellApartDay1:0, fellApartFinal:0,
         conv1to5Sum:0, conv1to5Count:0, conv2Sum:0, conv2Count:0, conv3Sum:0, conv3Count:0
       };
     }
     const t = byTrainerMap[g.trainer];
     t.groups += 1;
+    if(g.fellApart){ t.fellApart += 1; t.fellApartDay1 += g.day1; t.fellApartFinal += g.finalCount; }
     t.day1 += g.day1; t.leftSelf += g.leftSelf; t.refused += g.refused;
     t.transferred += g.transferred; t.finalCount += g.finalCount;
     if(g.conv1to5!==null && g.conv1to5!==undefined){ t.conv1to5Sum += g.conv1to5; t.conv1to5Count += 1; }
@@ -413,10 +424,11 @@ function aggregateFromGroups(groups, raw){
     if(g.conv3!==null && g.conv3!==undefined){ t.conv3Sum += g.conv3; t.conv3Count += 1; }
   });
   const byTrainer = Object.values(byTrainerMap).sort((a,b)=>a.name.localeCompare(b.name,'ru')).map(t=>({
-    name:t.name, groups:t.groups, day1:t.day1, leftSelf:t.leftSelf, refused:t.refused,
+    name:t.name, groups:t.groups, fellApart:t.fellApart, day1:t.day1, leftSelf:t.leftSelf, refused:t.refused,
     transferred:t.transferred, finalCount:t.finalCount,
     conv1to5: t.conv1to5Count>0 ? round1(t.conv1to5Sum/t.conv1to5Count) : null,
     conv1to5Weighted: t.day1>0 ? round1(t.finalCount/t.day1*100) : null,
+    fellApartConv1to5: t.fellApartDay1>0 ? round1(t.fellApartFinal/t.fellApartDay1*100) : null,
     conv2: t.conv2Count>0 ? round1(t.conv2Sum/t.conv2Count) : null,
     conv3: t.conv3Count>0 ? round1(t.conv3Sum/t.conv3Count) : null
   }));
@@ -425,18 +437,20 @@ function aggregateFromGroups(groups, raw){
   const byMonthMap = {};
   groups.forEach(g=>{
     if(!byMonthMap[g.month]){
-      byMonthMap[g.month] = {month:g.month, groups:0, day1:0, finalCount:0, leftSelf:0, refused:0, transferred:0};
+      byMonthMap[g.month] = {month:g.month, groups:0, fellApart:0, day1:0, finalCount:0, leftSelf:0, refused:0, transferred:0, fellApartDay1:0, fellApartFinal:0};
       monthOrder.push(g.month);
     }
     const m = byMonthMap[g.month];
     m.groups += 1; m.day1 += g.day1; m.finalCount += g.finalCount;
+    if(g.fellApart){ m.fellApart += 1; m.fellApartDay1 += g.day1; m.fellApartFinal += g.finalCount; }
     m.leftSelf += g.leftSelf; m.refused += g.refused; m.transferred += g.transferred;
   });
   const byMonth = monthOrder.map(key=>{
     const m = byMonthMap[key];
     return {
       ...m,
-      conv1to5: m.day1>0 ? round1(m.finalCount/m.day1*100) : null
+      conv1to5: m.day1>0 ? round1(m.finalCount/m.day1*100) : null,
+      fellApartConv1to5: m.fellApartDay1>0 ? round1(m.fellApartFinal/m.fellApartDay1*100) : null
     };
   });
 
@@ -448,7 +462,11 @@ function aggregateFromGroups(groups, raw){
     totals: {
       groups: groups.length,
       notGathered: null,
-      fellApart: null,
+      fellApart,
+      fellApartDay1,
+      fellApartFinalCount,
+      fellApartConv1to5,
+      fellApartShare,
       day1, day2Start, day3Start, leftSelf, refused, transferred, finalCount,
       conv1to5: day1>0 ? round1(finalCount/day1*100) : 0
     },
@@ -472,12 +490,14 @@ function buildViewData(raw, month){
       allByMonth: raw.byMonth || [],
       byTrainer: (raw.byTrainer||[]).map(t=>({
         ...t,
+        fellApart: t.fellApart!=null ? t.fellApart : 0,
         conv1to5Weighted: t.conv1to5Weighted!=null ? t.conv1to5Weighted
           : (t.day1>0 ? round1(t.finalCount/t.day1*100) : null)
       })),
       byMonth: (raw.byMonth||[]).map(m=>({
         ...m,
         day1: m.day1!=null ? m.day1 : null,
+        fellApart: m.fellApart!=null ? m.fellApart : 0,
         leftSelf: m.leftSelf!=null ? m.leftSelf : 0,
         refused: m.refused!=null ? m.refused : 0,
         transferred: m.transferred!=null ? m.transferred : 0,
@@ -616,19 +636,19 @@ function exportActiveTabCsv(){
   const tab = document.querySelector('.tab-btn.active')?.dataset.tab || 'overview';
   const stamp = new Date().toISOString().slice(0,10);
   if(tab === 'trainers'){
-    const rows = [['Тренер','Групп','1й день','Ушли сами','Отказали','Перенесли','Итог','Конв взвеш','Конв ср%','Конв 2→5','Конв 3→5']];
+    const rows = [['Тренер','Групп','Распалось','1й день','Ушли сами','Отказали','Перенесли','Итог','Конв взвеш','Конв ср%','Конв распавш','Конв 2→5','Конв 3→5']];
     viewData.byTrainer.forEach(t=>rows.push([
-      t.name, t.groups, t.day1, t.leftSelf, t.refused, t.transferred, t.finalCount,
-      t.conv1to5Weighted, t.conv1to5, t.conv2, t.conv3
+      t.name, t.groups, t.fellApart||0, t.day1, t.leftSelf, t.refused, t.transferred, t.finalCount,
+      t.conv1to5Weighted, t.conv1to5, t.fellApartConv1to5, t.conv2, t.conv3
     ]));
     downloadCsv(`trainers_${stamp}.csv`, rows);
     return;
   }
   if(tab === 'months'){
     const months = viewData.periodFiltered ? viewData.byMonth : (dashboardData.byMonth||[]);
-    const rows = [['Месяц','Групп','1й день','Итог','Ушли сами','Отказали','Перенесли','Конв 1→5']];
+    const rows = [['Месяц','Групп','Распалось','1й день','Итог','Ушли сами','Отказали','Перенесли','Конв 1→5','Конв распавш']];
     months.forEach(m=>rows.push([
-      m.month, m.groups, m.day1, m.finalCount, m.leftSelf, m.refused, m.transferred, m.conv1to5
+      m.month, m.groups, m.fellApart||0, m.day1, m.finalCount, m.leftSelf, m.refused, m.transferred, m.conv1to5, m.fellApartConv1to5
     ]));
     downloadCsv(`months_${stamp}.csv`, rows);
     return;
@@ -638,6 +658,10 @@ function exportActiveTabCsv(){
     ['Показатель','Значение'],
     ['Период', periodMonth || 'Все месяцы'],
     ['Групп', t.groups],
+    ['Не собралась', t.notGathered],
+    ['Распалось', t.fellApart],
+    ['Доля распавшихся %', t.fellApartShare],
+    ['Конв 1→5 распавшихся %', t.fellApartConv1to5],
     ['Конв 1→5 взвеш %', t.conv1to5],
     ['1й день', t.day1],
     ['Выход на линию', t.finalCount],
@@ -645,10 +669,10 @@ function exportActiveTabCsv(){
     ['Отказали', t.refused],
     ['Перенесли', t.transferred],
     [],
-    ['Месяц','Групп','Ушли сами','Отказали','Перенесли','Конв 1→5']
+    ['Месяц','Групп','Распалось','Ушли сами','Отказали','Перенесли','Конв 1→5','Конв распавш']
   ];
   (dashboardData.byMonth||[]).forEach(m=>rows.push([
-    m.month, m.groups, m.leftSelf, m.refused, m.transferred, m.conv1to5
+    m.month, m.groups, m.fellApart||0, m.leftSelf, m.refused, m.transferred, m.conv1to5, m.fellApartConv1to5
   ]));
   downloadCsv(`overview_${stamp}.csv`, rows);
 }
@@ -858,11 +882,20 @@ function renderOverview(data){
   const finalDelta = showMomOnTotals && cur && prev ? deltaHtml(cur.finalCount||0, prev.finalCount||0, {note})
     : (!showMomOnTotals && prev ? deltaHtml(t.finalCount, prev.finalCount||0, {note}) : deltaHtml(null, null, {note}));
 
-  const notHeld = (t.notGathered!=null && t.fellApart!=null)
-    ? `${t.notGathered+t.fellApart} групп не состоялось (не собралась / распалась)`
-    : 'только valid-группы выбранного месяца';
+  const notHeld = t.notGathered!=null
+    ? `${t.notGathered} не собралась (вне расчёта)`
+    : '«не собралась» недоступно в фильтре месяца';
+  const fellShare = t.fellApartShare!=null ? t.fellApartShare : (t.groups ? round1((t.fellApart||0)/t.groups*100) : 0);
+  const fellConv = t.fellApartConv1to5!=null ? t.fellApartConv1to5+'%' : '—';
+  const fellDelta = showMomOnTotals && cur && prev && cur.fellApart!=null && prev.fellApart!=null
+    ? deltaHtml(cur.fellApart, prev.fellApart, {invert:true, note})
+    : (!showMomOnTotals && prev && prev.fellApart!=null ? deltaHtml(t.fellApart||0, prev.fellApart||0, {invert:true, note}) : deltaHtml(null, null, {note}));
 
   const scope = ctx.scope;
+  const fellByTrainer = [...data.byTrainer].filter(tr=>(tr.fellApart||0)>0)
+    .sort((a,b)=>(b.fellApart||0)-(a.fellApart||0)).slice(0,5);
+  const monthsForFell = data.allByMonth || data.byMonth || [];
+
   let html = `
   <div id="panel-overview" class="tab-panel active">
     <div class="context-banner">
@@ -874,8 +907,9 @@ function renderOverview(data){
       <div class="side-note">${ctx.side}</div>
     </div>
     <div class="kpi-grid">
-      <div class="kpi-card"><div class="scope">${scope}</div><div class="label">Всего групп</div><div class="value">${t.groups}</div><div class="sub">${notHeld}</div>${groupsDelta}</div>
+      <div class="kpi-card"><div class="scope">${scope}</div><div class="label">Всего групп</div><div class="value">${t.groups}</div><div class="sub">${notHeld} · распавшиеся внутри</div>${groupsDelta}</div>
       <div class="kpi-card ${t.conv1to5>=m.planConv1to5?'success':'danger'}"><div class="scope">${scope}</div><div class="label">Конверсия 1→5 (взвеш.)</div><div class="value">${t.conv1to5}%</div><div class="sub">цель ${m.planConv1to5}% · считаем final ÷ day1</div>${convDelta}</div>
+      <div class="kpi-card warning"><div class="scope">${scope}</div><div class="label">Распалось групп</div><div class="value">${t.fellApart!=null?t.fellApart:0}</div><div class="sub">${fellShare}% от учтённых · конв. ${fellConv}</div>${fellDelta}</div>
       <div class="kpi-card danger"><div class="scope">${scope}</div><div class="label">Ушли сами</div><div class="value">${t.leftSelf}</div><div class="sub">${pct(t.leftSelf,t.day1)}% от вышедших на 1-й день</div>${leftDelta}</div>
       <div class="kpi-card"><div class="scope">${scope}</div><div class="label">Отказали мы</div><div class="value">${t.refused}</div><div class="sub">${pct(t.refused,t.day1)}% от вышедших на 1-й день</div>${refusedDelta}</div>
       <div class="kpi-card accent"><div class="scope">${scope}</div><div class="label">Вышло на линию</div><div class="value">${t.finalCount}</div><div class="sub">из ${t.day1} человек на 1-м дне</div>${finalDelta}</div>
@@ -895,21 +929,64 @@ function renderOverview(data){
       <div class="section-head"><h2>Отсев по месяцам</h2><div class="desc">Всегда полная история, даже если сверху выбран один месяц</div></div>
       <div style="overflow-x:auto;">
         <table class="dropout-table">
-          <thead><tr><th>Месяц</th><th>Групп</th><th>Ушли сами</th><th>Отказали</th><th>Перенесли</th><th>Конв. 1→5</th></tr></thead>
+          <thead><tr><th>Месяц</th><th>Групп</th><th>Распалось</th><th>Ушли сами</th><th>Отказали</th><th>Перенесли</th><th>Конв. 1→5</th></tr></thead>
           <tbody>
-            ${(data.allByMonth||data.byMonth).map(row=>`
+            ${monthsForFell.map(row=>`
               <tr>
                 <td>${row.month}</td>
                 <td>${row.groups}</td>
+                <td>${row.fellApart!=null?row.fellApart:0}</td>
                 <td>${row.leftSelf!=null?row.leftSelf:'—'}</td>
                 <td>${row.refused!=null?row.refused:'—'}</td>
                 <td>${row.transferred!=null?row.transferred:'—'}</td>
                 <td><span class="badge ${pctBadgeClass(row.conv1to5)}">${row.conv1to5!=null?row.conv1to5+'%':'—'}</span></td>
-              </tr>`).join('') || '<tr><td colspan="6" style="font-family:var(--font-body);color:var(--text-muted);">Нет данных</td></tr>'}
+              </tr>`).join('') || '<tr><td colspan="7" style="font-family:var(--font-body);color:var(--text-muted);">Нет данных</td></tr>'}
           </tbody>
         </table>
       </div>
-      <div class="footnote">На что смотреть: красный/розовый бейдж конверсии — ниже плана; зелёный — у цели.</div>
+      <div class="footnote">На что смотреть: красный/розовый бейдж конверсии — ниже плана; зелёный — у цели. «Распалось» входит в «Групп».</div>
+    </div>
+    <div class="two-col">
+      <div class="section">
+        <div class="section-head"><h2>Распавшиеся группы</h2><div class="desc">Входят в расчёт · метка «распалась» · конв. только по ним</div></div>
+        <div class="mini-kpi-grid cols-3" style="margin-bottom:14px;">
+          <div class="mini-kpi"><div class="label">Всего</div><div class="value">${t.fellApart!=null?t.fellApart:0}</div></div>
+          <div class="mini-kpi"><div class="label">Доля</div><div class="value">${fellShare}%</div></div>
+          <div class="mini-kpi"><div class="label">Конв. 1→5</div><div class="value">${fellConv}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${t.fellApartDay1||0} → ${t.fellApartFinalCount||0}</div>
+          </div>
+        </div>
+        <table class="dropout-table">
+          <thead><tr><th>Тренер</th><th>Распалось</th><th>Из групп</th><th>Конв. у распавш.</th></tr></thead>
+          <tbody>
+            ${fellByTrainer.map(tr=>`
+              <tr>
+                <td>${tr.name}</td>
+                <td>${tr.fellApart}</td>
+                <td>${tr.groups}</td>
+                <td><span class="badge ${pctBadgeClass(tr.fellApartConv1to5)}">${tr.fellApartConv1to5!=null?tr.fellApartConv1to5+'%':'—'}</span></td>
+              </tr>`).join('') || '<tr><td colspan="4" style="font-family:var(--font-body);color:var(--text-muted);">Нет распавшихся в области</td></tr>'}
+          </tbody>
+        </table>
+        <div class="footnote" style="margin-top:10px;">«Не собралась» по-прежнему вне KPI и воронки.</div>
+      </div>
+      <div class="section">
+        <div class="section-head"><h2>Распад по месяцам</h2><div class="desc">Полная история · доля и конверсия распавшихся</div></div>
+        <table class="dropout-table">
+          <thead><tr><th>Месяц</th><th>Распалось</th><th>Доля</th><th>Конв. распавш.</th></tr></thead>
+          <tbody>
+            ${monthsForFell.map(row=>{
+              const share = row.groups ? round1(((row.fellApart||0)/row.groups)*100) : 0;
+              return `<tr>
+                <td>${row.month}</td>
+                <td>${row.fellApart!=null?row.fellApart:0}</td>
+                <td>${share}%</td>
+                <td><span class="badge ${pctBadgeClass(row.fellApartConv1to5)}">${row.fellApartConv1to5!=null?row.fellApartConv1to5+'%':'—'}</span></td>
+              </tr>`;
+            }).join('') || '<tr><td colspan="4" style="font-family:var(--font-body);color:var(--text-muted);">Нет данных</td></tr>'}
+          </tbody>
+        </table>
+      </div>
     </div>
     <div class="three-col">
       ${topBottomCard(data, 'Лучшие тренеры', true)}
@@ -1019,7 +1096,7 @@ function renderTrainerTable(data){
     return trainerSortState.dir==='asc'? av-bv : bv-av;
   });
   const cols = [
-    ['name','Тренер'],['groups','Групп'],['day1','1-й день'],
+    ['name','Тренер'],['groups','Групп'],['fellApart','Распалось'],['day1','1-й день'],
     ['leftSelf','Ушли сами'],['refused','Отказали'],['transferred','Перенесли'],['finalCount','Итог'],
     ['conv1to5Weighted','Конв. взвеш.'],['conv1to5','Конв. ср.%'],['conv2','Конв. 2→5'],['conv3','Конв. 3→5']
   ];
@@ -1029,7 +1106,7 @@ function renderTrainerTable(data){
   }).join('');
   el('trainerBody').innerHTML = trainers.map(t=>`
     <tr data-trainer="${t.name}">
-      <td>${t.name}</td><td>${t.groups}</td><td>${t.day1}</td><td>${t.leftSelf}</td><td>${t.refused}</td><td>${t.transferred}</td><td>${t.finalCount}</td>
+      <td>${t.name}</td><td>${t.groups}</td><td>${t.fellApart||0}</td><td>${t.day1}</td><td>${t.leftSelf}</td><td>${t.refused}</td><td>${t.transferred}</td><td>${t.finalCount}</td>
       <td><span class="badge ${pctBadgeClass(t.conv1to5Weighted)}">${t.conv1to5Weighted!=null?t.conv1to5Weighted+'%':'—'}</span></td>
       <td>${t.conv1to5!=null?t.conv1to5+'%':'—'}</td>
       <td>${t.conv2!=null?t.conv2+'%':'—'}</td><td>${t.conv3!=null?t.conv3+'%':'—'}</td>
@@ -1076,7 +1153,9 @@ function openTrainerDetail(name, opts={}){
       </div>
     </div>
     <div class="mini-kpi-grid">
-      <div class="mini-kpi"><div class="label">Групп проведено</div><div class="value">${trainer.groups}</div></div>
+      <div class="mini-kpi"><div class="label">Групп проведено</div><div class="value">${trainer.groups}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">из них распалось: ${trainer.fellApart||0}</div>
+      </div>
       <div class="mini-kpi"><div class="label">Конв. взвеш. 1→5</div><div class="value">${tw!=null?tw+'%':'—'}</div>
         ${diff!==null ? `<div class="compare-row ${diff>=0?'up':'down'}">${diff>=0?'▲':'▼'} ${Math.abs(diff)}% к периоду</div>` : ''}
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">ср.% групп: ${trainer.conv1to5!=null?trainer.conv1to5+'%':'—'}</div>
@@ -1089,9 +1168,23 @@ function openTrainerDetail(name, opts={}){
       <div class="mini-kpi"><div class="label">Конв. 2→5</div><div class="value">${trainer.conv2!=null?trainer.conv2+'%':'—'}</div></div>
       <div class="mini-kpi"><div class="label">Конв. 3→5</div><div class="value">${trainer.conv3!=null?trainer.conv3+'%':'—'}</div></div>
     </div>
-    <div class="footnote" style="margin:-2px 0 14px;">Область карточки: ${periodMonth?`месяц «${periodMonth}»`:'весь период'}. Показаны все агрегаты API по valid-группам. «Не собралась/распалась» по тренеру в API нет.</div>
+    <div class="footnote" style="margin:-2px 0 14px;">Область: ${periodMonth?`месяц «${periodMonth}»`:'весь период'}. «Распалась» входит в число групп и конверсии; «не собралась» в API по тренеру нет.</div>
     <div class="section-head"><h2>Воронка тренера</h2></div>
     <div class="funnel" id="trainerFunnel" style="margin-bottom:22px;"></div>
+    <div class="section-head"><h2>Группы тренера</h2></div>
+    <table class="dropout-table" style="margin-bottom:18px;">
+      <thead><tr><th>Группа</th><th>Старт</th><th>1-й день</th><th>Итог</th><th>Конв.</th><th>Статус</th></tr></thead>
+      <tbody>
+        ${groups.map(g=>`<tr>
+          <td>${g.label||'—'}</td>
+          <td>${g.startDate||'—'}</td>
+          <td>${g.day1}</td>
+          <td>${g.finalCount}</td>
+          <td><span class="badge ${pctBadgeClass(g.conv1to5)}">${g.conv1to5!=null?g.conv1to5+'%':'—'}</span></td>
+          <td>${g.fellApart?'<span class="badge neutral">распалась</span>':'<span class="badge success">ok</span>'}</td>
+        </tr>`).join('') || '<tr><td colspan="6" style="font-family:var(--font-body);color:var(--text-muted);">Нет групп</td></tr>'}
+      </tbody>
+    </table>
     <div class="section-head"><h2>Динамика и отсев по месяцам</h2></div>
     <div style="position:relative;height:180px;margin-bottom:12px;"><canvas id="trainerTrendChart"></canvas></div>
     <table class="dropout-table">
@@ -1154,6 +1247,7 @@ function renderMonthsTab(data){
     <div class="month-card" data-month="${m.month}">
       <h3>${m.month}</h3>
       <div class="row"><span>Групп</span><b>${m.groups}</b></div>
+      <div class="row"><span>Распалось</span><b>${m.fellApart!=null?m.fellApart:0}</b></div>
       <div class="row"><span>Конв. 1→5</span><b>${m.conv1to5!==null&&m.conv1to5!==undefined?m.conv1to5+'%':'—'}</b></div>
       <div class="row"><span>Ушли сами</span><b>${m.leftSelf!=null?m.leftSelf:'—'}</b></div>
       <div class="row"><span>Отказали</span><b>${m.refused!=null?m.refused:'—'}</b></div>

@@ -8,7 +8,7 @@
 | Branch деплоя UI | `main` |
 | Script ID | `1jNtOi1KDqH0HltJPgBkBbZJKCvvY1191vshAxe3vZjTjquO9QG2bWphZ` |
 | Deployment @HEAD (dev/head) | `AKfycbzjxGv5RjnrwtfceJyD4AfW0GQSHd72PgUbeAcC3KxC` |
-| Deployment веб-UI (v2 /exec) | `AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNjs7MKzbt9Fw` |
+| Deployment веб-UI (/exec, schema v3) | `AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNjs7MKzbt9Fw` |
 | Локальный GAS | `apps-script/` |
 
 UI по умолчанию бьёт в **deployment v2** (см. `DEFAULT_APPS_SCRIPT_URL` в `index.html`).
@@ -91,7 +91,7 @@ clasp deploy -i AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNj
 1. Лист называется точно `Контроль штата обучения`?
 2. Есть даты в колонке C?
 3. Не упёрлись в `DATA_END_ROW = 500`?
-4. Комментарии не отправили все строки в notGathered/fellApart?
+4. Комментарии: «не собралась» вне расчёта; «распалась» внутри valid с меткой — сверить DataModel / ADR-011?
 
 ### Неверные конверсии
 
@@ -114,9 +114,9 @@ clasp login
 
 ## Смоук-чек после релиза
 
-- [ ] `GET /exec` возвращает JSON с `schemaVersion`, `metrics`, `totals`, `byTrainer`, `byMonth`, `groups`
-- [ ] У тренера есть `conv1to5Weighted`; у месяца — `leftSelf` / `refused` / `transferred`
-- [ ] Netlify UI: статус «Обновлено…», видны KPI и дельты
+- [ ] `GET /exec` возвращает JSON с `schemaVersion: 3`, `metrics.fellApartInValid`, `totals`, `byTrainer`, `byMonth`, `groups`
+- [ ] У тренера есть `conv1to5Weighted` и `fellApart`; у группы — `fellApart`; у totals — `fellApartConv1to5`
+- [ ] Netlify UI: KPI «Распалось групп», бейдж в карточке тренера, статус «Обновлено…»
 - [ ] Фильтр периода переключает данные; легенда порогов видна
 - [ ] В шапке видно «Данные API: …»; кнопка «Экспорт CSV» скачивает файл
 - [ ] Deep-link `?trainer=` / `?month=` / `?period=` открывает нужный экран; «Ссылка» копирует URL
