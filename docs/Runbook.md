@@ -8,7 +8,7 @@
 | Branch деплоя UI | `main` |
 | Script ID | `1jNtOi1KDqH0HltJPgBkBbZJKCvvY1191vshAxe3vZjTjquO9QG2bWphZ` |
 | Deployment @HEAD (dev/head) | `AKfycbzjxGv5RjnrwtfceJyD4AfW0GQSHd72PgUbeAcC3KxC` |
-| Deployment веб-UI (/exec, schema v3) | `AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNjs7MKzbt9Fw` |
+| Deployment веб-UI (/exec, schema v4) | `AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNjs7MKzbt9Fw` |
 | Локальный GAS | `apps-script/` |
 
 UI по умолчанию бьёт в **deployment v2** (см. `DEFAULT_APPS_SCRIPT_URL` в `index.html`).
@@ -114,10 +114,11 @@ clasp login
 
 ## Смоук-чек после релиза
 
-- [ ] `GET /exec` возвращает JSON с `schemaVersion: 3`, `metrics.fellApartInValid`, `totals`, `byTrainer`, `byMonth`, `groups`
-- [ ] У тренера есть `conv1to5Weighted`, `fellApart`, `score` (TQI); у группы — `fellApart`; у totals — `fellApartConv1to5`
-- [ ] В UI топ тренеров показывает TQI, не только % 1→5
-- [ ] Netlify UI: KPI «Распалось групп», бейдж в карточке тренера, статус «Обновлено…»
+- [ ] `GET /exec` → `schemaVersion: 4`, `metrics.rankScore: tqi_v2`, `byTrainer.rank` / `scoreParts`
+- [ ] У тренера: `contributionShare`, `yieldPerGroup`, `leftRate`; у totals — `yieldPerGroup`, `leftSelfRate`
+- [ ] UI: полный рейтинг на обзоре, блоки сильных/слабых сторон, таблица тренеров с местом
+- [ ] Netlify UI после hard refresh: статус «Обновлено…», TQI v2 числа отличаются от чистой 1→5
+
 - [ ] Фильтр периода переключает данные; легенда порогов видна
 - [ ] В шапке видно «Данные API: …»; кнопка «Экспорт CSV» скачивает файл
 - [ ] Deep-link `?trainer=` / `?month=` / `?period=` открывает нужный экран; «Ссылка» копирует URL

@@ -63,11 +63,11 @@
 
 | Сущность | Как строится |
 |----------|--------------|
-| `byTrainer` | group-by нормализованный тренер по valid; `score` (TQI), `fellApart` / `fellApartConv1to5`; `conv1to5` = ср.% групп, `conv1to5Weighted` = final/day1 |
+| `byTrainer` | group-by тренер; TQI v2 `score`/`rank`/`scoreParts`, rates, `yieldPerGroup`, `contributionShare` |
 | `byMonth` | group-by `month`; суммы day1/final/отсев + `fellApart` + взвешенные conv |
 | `groups` | map valid → GroupRow (`fellApart` boolean) |
-| `totals` / `funnel` | суммы по valid; `notGathered` вне valid; метрики распада (`fellApart*`) |
-| `metrics` | пороги бейджей, `fellApartInValid`, формулы для UI |
+| `totals` / `funnel` | суммы + rates (`leftSelfRate`…) + `yieldPerGroup` / `avgDay1PerGroup` |
+| `metrics` | TQI v2 веса, пороги бейджей, `fellApartInValid` |
 
 ## Лист-результат
 

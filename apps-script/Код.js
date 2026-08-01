@@ -37,7 +37,7 @@ var DASHBOARD_SHEET_NAME = 'Дашборд';               // название �
 var DATA_START_ROW = 1;   // с какой строки начинать чтение
 var DATA_END_ROW = 500;   // до какой строки читать (с запасом)
 var LAST_COLUMN = 'R';    // последняя колонка с данными
-var API_CACHE_KEY = 'dashboard_json_v3';
+var API_CACHE_KEY = 'dashboard_json_v4';
 var API_CACHE_TTL_SEC = 300; // 5 минут — повторные открытия дашборда без пересчёта листа
 // =================================================================
 
@@ -126,7 +126,7 @@ function collectDashboardData() {
 
   var trainerList = Object.keys(byTrainer).sort().map(function(name) {
     var t = byTrainer[name];
-    var row = {
+    return {
       name: t.name,
       groups: t.groups,
       fellApart: t.fellApart,
@@ -143,8 +143,6 @@ function collectDashboardData() {
       conv2: t.conv2Count > 0 ? round1(t.conv2Sum / t.conv2Count * 100) : null,
       conv3: t.conv3Count > 0 ? round1(t.conv3Sum / t.conv3Count * 100) : null
     };
-    row.score = computeTrainerScore(row);
-    return row;
   });
 
   // ---- по месяцам (для тренда + отсев) ----
@@ -230,30 +228,27 @@ function collectDashboardData() {
   var fellApartFinal = sumEntryColumn(fellApartEntries, COL.finalCount);
   var fellApartConv1to5 = fellApartDay1 > 0 ? round1(fellApartFinal / fellApartDay1 * 100) : null;
   var fellApartShare = totalGroups > 0 ? round1(fellApart / totalGroups * 100) : 0;
+  var leftSelfRate = totalDay1 > 0 ? round1(totalLeftSelf / totalDay1 * 100) : 0;
+  var refuseRate = totalDay1 > 0 ? round1(totalRefused / totalDay1 * 100) : 0;
+  var transferRate = totalDay1 > 0 ? round1(totalTransferred / totalDay1 * 100) : 0;
+  var yieldPerGroup = totalGroups > 0 ? round1(totalFinal / totalGroups) : 0;
+  var avgDay1PerGroup = totalGroups > 0 ? round1(totalDay1 / totalGroups) : 0;
+
+  var rankCtx = {
+    totalFinal: totalFinal,
+    totalGroups: totalGroups,
+    totalDay1: totalDay1
+  };
+  var metricsMeta = buildMetricsMeta();
+  trainerList = trainerList.map(function(row) {
+    return enrichTrainerRow(row, rankCtx, metricsMeta);
+  });
+  trainerList = assignTrainerRanks(trainerList, metricsMeta);
 
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     updatedAt: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss"),
-    metrics: {
-      conv1to5Totals: 'weighted',      // finalSum / day1Sum
-      conv1to5ByTrainer: 'avgGroups',  // среднее % групп; см. также conv1to5Weighted
-      conv1to5ByMonth: 'weighted',
-      fellApartInValid: true,          // «распалась» входит в valid + метка
-      rankScore: 'tqi',                // Trainer Quality Index — составной рейтинг
-      rankMinGroups: 2,
-      rankMinDay1: 10,
-      rankWeights: {
-        conv1to5: 0.45,
-        conv2: 0.15,
-        conv3: 0.10,
-        retention: 0.20,
-        refuseControl: 0.05,
-        stability: 0.05
-      },
-      badgeLow: 20,
-      badgeHigh: 30,
-      planConv1to5: 30
-    },
+    metrics: metricsMeta,
     totals: {
       groups: totalGroups,
       notGathered: notGathered,
@@ -269,7 +264,12 @@ function collectDashboardData() {
       refused: totalRefused,
       transferred: totalTransferred,
       finalCount: totalFinal,
-      conv1to5: overallConv1to5
+      conv1to5: overallConv1to5,
+      leftSelfRate: leftSelfRate,
+      refuseRate: refuseRate,
+      transferRate: transferRate,
+      yieldPerGroup: yieldPerGroup,
+      avgDay1PerGroup: avgDay1PerGroup
     },
     funnel: [
       { label: '1-й день', value: totalDay1 },
@@ -321,20 +321,33 @@ function buildDashboard() {
   var tableStartRow = 4 + summaryRows.length + 3;
   dash.getRange(tableStartRow, 1).setValue('ПО ТРЕНЕРАМ').setFontWeight('bold').setFontSize(13);
 
-  var trainerHeaders = ['Тренер', 'Индекс TQI', 'Групп', 'Распалось', 'Вышло 1 день', 'Ушли сами', 'Отказали мы', 'Перенесли', 'Итог выход', 'Конв. 1→5', 'Конв. 2→5', 'Конв. 3→5'];
+  var trainerHeaders = ['Место', 'Тренер', 'TQI v2', 'Групп', 'Day1→Итог', 'Выход/гр', 'Вклад %', 'Распалось', 'Ушли %', 'Конв. 1→5', 'Конв. 2→5', 'Конв. 3→5'];
   var headerRow = tableStartRow + 1;
   dash.getRange(headerRow, 1, 1, trainerHeaders.length).setValues([trainerHeaders]).setFontWeight('bold').setBackground('#d9d9d9');
 
   var trainersSorted = data.byTrainer.slice().sort(function(a, b) {
+    var ar = a.rank != null ? a.rank : 9999;
+    var br = b.rank != null ? b.rank : 9999;
+    if (ar !== br) return ar - br;
     var as = a.score != null ? a.score : -1;
     var bs = b.score != null ? b.score : -1;
     return bs - as;
   });
   var trainerRows = trainersSorted.map(function(tr) {
-    return [tr.name, tr.score != null ? tr.score : '', tr.groups, tr.fellApart || 0, tr.day1, tr.leftSelf, tr.refused, tr.transferred, tr.finalCount,
-      tr.conv1to5 !== null ? tr.conv1to5 + '%' : '',
-      tr.conv2 !== null ? tr.conv2 + '%' : '',
-      tr.conv3 !== null ? tr.conv3 + '%' : ''];
+    return [
+      tr.rank != null ? tr.rank : '',
+      tr.name,
+      tr.score != null ? tr.score : '',
+      tr.groups,
+      (tr.day1 || 0) + '→' + (tr.finalCount || 0),
+      tr.yieldPerGroup != null ? tr.yieldPerGroup : '',
+      tr.contributionShare != null ? tr.contributionShare + '%' : '',
+      tr.fellApart || 0,
+      tr.leftRate != null ? tr.leftRate + '%' : '',
+      tr.conv1to5Weighted !== null && tr.conv1to5Weighted !== undefined ? tr.conv1to5Weighted + '%' : '',
+      tr.conv2 !== null && tr.conv2 !== undefined ? tr.conv2 + '%' : '',
+      tr.conv3 !== null && tr.conv3 !== undefined ? tr.conv3 + '%' : ''
+    ];
   });
   if (trainerRows.length > 0) {
     dash.getRange(headerRow + 1, 1, trainerRows.length, trainerHeaders.length).setValues(trainerRows);
@@ -343,20 +356,20 @@ function buildDashboard() {
 
   var chart1 = dash.newChart()
     .setChartType(Charts.ChartType.COLUMN)
-    .addRange(dash.getRange(headerRow, 1, trainerRows.length + 1, 1))
-    .addRange(dash.getRange(headerRow, 9, trainerRows.length + 1, 1))
+    .addRange(dash.getRange(headerRow, 2, trainerRows.length + 1, 1))
+    .addRange(dash.getRange(headerRow, 3, trainerRows.length + 1, 1))
     .setPosition(headerRow, trainerHeaders.length + 2, 0, 0)
-    .setOption('title', 'Итоговый выход на линию по тренерам')
+    .setOption('title', 'TQI v2 по тренерам')
     .setOption('width', 600).setOption('height', 350)
     .build();
   dash.insertChart(chart1);
 
-  dash.getRange(tableStartRow - 2, 14, 3, 2).setValues([
+  dash.getRange(tableStartRow - 2, 15, 3, 2).setValues([
     ['Ушли сами', t.leftSelf], ['Отказали мы', t.refused], ['Перенесли', t.transferred]
   ]);
   var chart2 = dash.newChart()
     .setChartType(Charts.ChartType.PIE)
-    .addRange(dash.getRange(tableStartRow - 2, 14, 3, 2))
+    .addRange(dash.getRange(tableStartRow - 2, 15, 3, 2))
     .setPosition(headerRow, trainerHeaders.length + 2, 20, 0)
     .setOption('title', 'Структура отсева (всего)')
     .setOption('width', 600).setOption('height', 350)
@@ -439,33 +452,135 @@ function clamp100(n) {
   return n;
 }
 
+function buildMetricsMeta() {
+  return {
+    conv1to5Totals: 'weighted',
+    conv1to5ByTrainer: 'avgGroups',
+    conv1to5ByMonth: 'weighted',
+    fellApartInValid: true,
+    rankScore: 'tqi_v2',
+    rankMinGroups: 2,
+    rankMinDay1: 10,
+    rankWeights: {
+      quality: 0.50,
+      reliability: 0.15,
+      contribution: 0.20,
+      yield: 0.10,
+      stability: 0.05
+    },
+    qualityMix: { conv1to5: 0.60, conv2: 0.25, conv3: 0.15 },
+    contribFullAtShare: 0.25,
+    reliabilityRefDay1: 200,
+    badgeLow: 20,
+    badgeHigh: 30,
+    planConv1to5: 30
+  };
+}
+
+function enrichTrainerRow(row, ctx, metricsMeta) {
+  var day1 = Number(row.day1) || 0;
+  var groups = Number(row.groups) || 0;
+  var finalCount = Number(row.finalCount) || 0;
+  var leftRate = day1 > 0 ? round1((Number(row.leftSelf) || 0) / day1 * 100) : null;
+  var refuseRate = day1 > 0 ? round1((Number(row.refused) || 0) / day1 * 100) : null;
+  var transferRate = day1 > 0 ? round1((Number(row.transferred) || 0) / day1 * 100) : null;
+  var fellShare = groups > 0 ? round1((Number(row.fellApart) || 0) / groups * 100) : 0;
+  var yieldPerGroup = groups > 0 ? round1(finalCount / groups) : null;
+  var totalFinal = ctx && ctx.totalFinal ? ctx.totalFinal : 0;
+  var contributionShare = totalFinal > 0 ? round1(finalCount / totalFinal * 100) : 0;
+  var scored = computeTrainerScore(row, metricsMeta, ctx);
+  return Object.assign({}, row, {
+    leftRate: leftRate,
+    refuseRate: refuseRate,
+    transferRate: transferRate,
+    fellShare: fellShare,
+    yieldPerGroup: yieldPerGroup,
+    contributionShare: contributionShare,
+    score: scored ? scored.score : null,
+    scoreParts: scored ? scored.parts : null
+  });
+}
+
+function assignTrainerRanks(list, metricsMeta) {
+  var minG = metricsMeta.rankMinGroups || 2;
+  var minD = metricsMeta.rankMinDay1 || 10;
+  var eligible = list.filter(function(t) {
+    return t.score != null && t.groups >= minG && (t.day1 || 0) >= minD;
+  }).slice().sort(function(a, b) {
+    if (b.score !== a.score) return b.score - a.score;
+    return (b.finalCount || 0) - (a.finalCount || 0);
+  });
+  var rankByName = {};
+  eligible.forEach(function(t, i) { rankByName[t.name] = i + 1; });
+  return list.map(function(t) {
+    return Object.assign({}, t, {
+      rank: rankByName[t.name] != null ? rankByName[t.name] : null,
+      rankEligible: !!rankByName[t.name]
+    });
+  }).sort(function(a, b) {
+    if (a.rank != null && b.rank != null) return a.rank - b.rank;
+    if (a.rank != null) return -1;
+    if (b.rank != null) return 1;
+    var as = a.score != null ? a.score : -1;
+    var bs = b.score != null ? b.score : -1;
+    return bs - as;
+  });
+}
+
 /**
- * TQI — Trainer Quality Index (0–100).
- * Учитывает конверсии 1→5 / 2→5 / 3→5, удержание (мало «ушли сами»),
- * контроль отказов и стабильность групп (мало «распалась»).
- * Веса — см. metrics.rankWeights (ADR-012).
+ * TQI v2 — гибрид качества обучения и вклада в результат компании (0–100).
+ * quality / reliability / contribution / yield / stability — см. ADR-013.
  */
-function computeTrainerScore(t, weights) {
+function computeTrainerScore(t, metricsMeta, ctx) {
   var c15 = t.conv1to5Weighted;
   if (c15 === null || c15 === undefined) return null;
-  var w = weights || {
-    conv1to5: 0.45, conv2: 0.15, conv3: 0.10,
-    retention: 0.20, refuseControl: 0.05, stability: 0.05
-  };
+  metricsMeta = metricsMeta || buildMetricsMeta();
+  ctx = ctx || {};
+  var w = metricsMeta.rankWeights || {};
+  var qm = metricsMeta.qualityMix || { conv1to5: 0.60, conv2: 0.25, conv3: 0.15 };
   var c2 = (t.conv2 !== null && t.conv2 !== undefined) ? t.conv2 : c15;
   var c3 = (t.conv3 !== null && t.conv3 !== undefined) ? t.conv3 : c15;
-  var leftRate = t.day1 > 0 ? (Number(t.leftSelf) || 0) / t.day1 * 100 : 0;
-  var refuseRate = t.day1 > 0 ? (Number(t.refused) || 0) / t.day1 * 100 : 0;
-  var fellShare = t.groups > 0 ? (Number(t.fellApart) || 0) / t.groups * 100 : 0;
-  var retention = clamp100(100 - leftRate);
-  var refuseControl = clamp100(100 - refuseRate);
+  var quality = clamp100(
+    (qm.conv1to5 || 0) * c15 +
+    (qm.conv2 || 0) * c2 +
+    (qm.conv3 || 0) * c3
+  );
+
+  var refDay1 = metricsMeta.reliabilityRefDay1 || 200;
+  var reliability = clamp100(
+    (Math.log((Number(t.day1) || 0) + 1) / Math.log(refDay1 + 1)) * 100
+  );
+
+  var totalFinal = Number(ctx.totalFinal) || 0;
+  var share = totalFinal > 0 ? (Number(t.finalCount) || 0) / totalFinal : 0;
+  var fullAt = metricsMeta.contribFullAtShare || 0.25;
+  var contribution = fullAt > 0 ? clamp100(share / fullAt * 100) : 0;
+
+  var totalGroups = Number(ctx.totalGroups) || 0;
+  var avgYield = totalGroups > 0 ? totalFinal / totalGroups : 0;
+  var yieldG = (Number(t.groups) || 0) > 0 ? (Number(t.finalCount) || 0) / t.groups : 0;
+  // при среднем yield = 50; при 2× среднем = 100
+  var yieldScore = avgYield > 0 ? clamp100((yieldG / avgYield) * 50) : 50;
+
+  var fellShare = (Number(t.groups) || 0) > 0
+    ? (Number(t.fellApart) || 0) / t.groups * 100 : 0;
   var stability = clamp100(100 - fellShare);
+
   var score =
-    (w.conv1to5 || 0) * c15 +
-    (w.conv2 || 0) * c2 +
-    (w.conv3 || 0) * c3 +
-    (w.retention || 0) * retention +
-    (w.refuseControl || 0) * refuseControl +
+    (w.quality || 0) * quality +
+    (w.reliability || 0) * reliability +
+    (w.contribution || 0) * contribution +
+    (w.yield || 0) * yieldScore +
     (w.stability || 0) * stability;
-  return round1(score);
+
+  return {
+    score: round1(score),
+    parts: {
+      quality: round1(quality),
+      reliability: round1(reliability),
+      contribution: round1(contribution),
+      yield: round1(yieldScore),
+      stability: round1(stability)
+    }
+  };
 }

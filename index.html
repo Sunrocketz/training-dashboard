@@ -323,7 +323,7 @@ let dashboardData = null;
 let viewData = null;
 let periodMonth = '';
 let refreshTimeout = null, refreshInterval = null;
-let trainerSortState = { key: 'score', dir: 'desc' };
+let trainerSortState = { key: 'rank', dir: 'asc' };
 let tabsInited = false;
 let pendingDeepLink = null;
 let deepLinkApplied = false;
@@ -333,11 +333,14 @@ let charts = {};
 
 const DEFAULT_METRICS = {
   badgeLow: 20, badgeHigh: 30, planConv1to5: 30,
+  rankScore: 'tqi_v2',
   rankMinGroups: 2, rankMinDay1: 10,
   rankWeights: {
-    conv1to5: 0.45, conv2: 0.15, conv3: 0.10,
-    retention: 0.20, refuseControl: 0.05, stability: 0.05
-  }
+    quality: 0.50, reliability: 0.15, contribution: 0.20, yield: 0.10, stability: 0.05
+  },
+  qualityMix: { conv1to5: 0.60, conv2: 0.25, conv3: 0.15 },
+  contribFullAtShare: 0.25,
+  reliabilityRefDay1: 200
 };
 
 function destroyChart(key){ if(charts[key]){ charts[key].destroy(); delete charts[key]; } }
@@ -387,30 +390,74 @@ function pctBadgeClass(value){
 
 function clamp100(n){ return Math.max(0, Math.min(100, n)); }
 
-/** TQI — составной индекс тренера (те же веса, что metrics.rankWeights в GAS). */
-function computeTrainerScore(t, weights){
-  const c15 = t.conv1to5Weighted!=null ? t.conv1to5Weighted : t.conv1to5;
-  if(c15==null) return null;
-  const w = Object.assign({}, DEFAULT_METRICS.rankWeights, weights || (metrics().rankWeights || {}));
-  const c2 = t.conv2!=null ? t.conv2 : c15;
-  const c3 = t.conv3!=null ? t.conv3 : c15;
-  const leftRate = t.day1>0 ? (t.leftSelf||0)/t.day1*100 : 0;
-  const refuseRate = t.day1>0 ? (t.refused||0)/t.day1*100 : 0;
-  const fellShare = t.groups>0 ? (t.fellApart||0)/t.groups*100 : 0;
-  const score =
-    (w.conv1to5||0)*c15 +
-    (w.conv2||0)*c2 +
-    (w.conv3||0)*c3 +
-    (w.retention||0)*clamp100(100-leftRate) +
-    (w.refuseControl||0)*clamp100(100-refuseRate) +
-    (w.stability||0)*clamp100(100-fellShare);
-  return round1(score);
+function scoreContextFromTotals(totals){
+  return {
+    totalFinal: totals && totals.finalCount != null ? totals.finalCount : 0,
+    totalGroups: totals && totals.groups != null ? totals.groups : 0,
+    totalDay1: totals && totals.day1 != null ? totals.day1 : 0
+  };
 }
 
-function withTrainerScore(t){
+/** TQI v2 — гибрид качества и вклада (как в GAS / ADR-013). */
+function computeTrainerScore(t, mtr, ctx){
+  const c15 = t.conv1to5Weighted!=null ? t.conv1to5Weighted : t.conv1to5;
+  if(c15==null) return null;
+  const m = Object.assign({}, DEFAULT_METRICS, mtr || metrics());
+  const w = Object.assign({}, DEFAULT_METRICS.rankWeights, m.rankWeights || {});
+  const qm = Object.assign({}, DEFAULT_METRICS.qualityMix, m.qualityMix || {});
+  const c2 = t.conv2!=null ? t.conv2 : c15;
+  const c3 = t.conv3!=null ? t.conv3 : c15;
+  const quality = clamp100((qm.conv1to5||0)*c15 + (qm.conv2||0)*c2 + (qm.conv3||0)*c3);
+  const ref = m.reliabilityRefDay1 || 200;
+  const reliability = clamp100(Math.log((t.day1||0)+1) / Math.log(ref+1) * 100);
+  const totalFinal = ctx && ctx.totalFinal ? ctx.totalFinal : 0;
+  const share = totalFinal>0 ? (t.finalCount||0)/totalFinal : 0;
+  const fullAt = m.contribFullAtShare || 0.25;
+  const contribution = fullAt>0 ? clamp100(share/fullAt*100) : 0;
+  const totalGroups = ctx && ctx.totalGroups ? ctx.totalGroups : 0;
+  const avgYield = totalGroups>0 ? totalFinal/totalGroups : 0;
+  const yieldG = t.groups>0 ? (t.finalCount||0)/t.groups : 0;
+  const yieldScore = avgYield>0 ? clamp100((yieldG/avgYield)*50) : 50;
+  const fellShare = t.groups>0 ? (t.fellApart||0)/t.groups*100 : 0;
+  const stability = clamp100(100-fellShare);
+  const score =
+    (w.quality||0)*quality +
+    (w.reliability||0)*reliability +
+    (w.contribution||0)*contribution +
+    (w.yield||0)*yieldScore +
+    (w.stability||0)*stability;
+  return {
+    score: round1(score),
+    parts: {
+      quality: round1(quality),
+      reliability: round1(reliability),
+      contribution: round1(contribution),
+      yield: round1(yieldScore),
+      stability: round1(stability)
+    }
+  };
+}
+
+function enrichTrainer(t, ctx){
+  const day1 = t.day1||0;
+  const groups = t.groups||0;
+  const scored = computeTrainerScore(t, metrics(), ctx);
   return Object.assign({}, t, {
-    score: t.score!=null ? t.score : computeTrainerScore(t)
+    leftRate: t.leftRate!=null ? t.leftRate : (day1>0 ? round1((t.leftSelf||0)/day1*100) : null),
+    refuseRate: t.refuseRate!=null ? t.refuseRate : (day1>0 ? round1((t.refused||0)/day1*100) : null),
+    transferRate: t.transferRate!=null ? t.transferRate : (day1>0 ? round1((t.transferred||0)/day1*100) : null),
+    fellShare: t.fellShare!=null ? t.fellShare : (groups>0 ? round1((t.fellApart||0)/groups*100) : 0),
+    yieldPerGroup: t.yieldPerGroup!=null ? t.yieldPerGroup : (groups>0 ? round1((t.finalCount||0)/groups) : null),
+    contributionShare: t.contributionShare!=null ? t.contributionShare
+      : (ctx && ctx.totalFinal>0 ? round1((t.finalCount||0)/ctx.totalFinal*100) : 0),
+    score: scored ? scored.score : null,
+    scoreParts: scored ? scored.parts : null
   });
+}
+
+function withTrainerScore(t, ctx){
+  const baseCtx = ctx || scoreContextFromTotals((viewData && viewData.totals) || (dashboardData && dashboardData.totals) || {});
+  return enrichTrainer(t, baseCtx);
 }
 
 function trainerRankEligible(t){
@@ -420,15 +467,65 @@ function trainerRankEligible(t){
   return t.score!=null && t.groups>=minG && (t.day1||0)>=minD;
 }
 
+function rankedTrainers(list, totals){
+  const ctx = scoreContextFromTotals(totals || {});
+  const enriched = (list||[]).map(t=>enrichTrainer(t, ctx));
+  const eligible = enriched.filter(trainerRankEligible)
+    .sort((a,b)=> b.score!==a.score ? b.score-a.score : (b.finalCount||0)-(a.finalCount||0));
+  const rankByName = {};
+  eligible.forEach((t,i)=>{ rankByName[t.name]=i+1; });
+  return enriched.map(t=>Object.assign({}, t, {
+    rank: rankByName[t.name]!=null ? rankByName[t.name] : null,
+    rankEligible: !!rankByName[t.name]
+  })).sort((a,b)=>{
+    if(a.rank!=null && b.rank!=null) return a.rank-b.rank;
+    if(a.rank!=null) return -1;
+    if(b.rank!=null) return 1;
+    return (b.score||0)-(a.score||0);
+  });
+}
+
+function companyInsights(data){
+  const t = data.totals || {};
+  const m = metrics();
+  const trainers = rankedTrainers(data.byTrainer, t);
+  const eligible = trainers.filter(x=>x.rankEligible);
+  const leftRate = t.leftSelfRate!=null ? t.leftSelfRate : pct(t.leftSelf, t.day1);
+  const refuseRate = t.refuseRate!=null ? t.refuseRate : pct(t.refused, t.day1);
+  const transferRate = t.transferRate!=null ? t.transferRate : pct(t.transferred, t.day1);
+  const yieldPerGroup = t.yieldPerGroup!=null ? t.yieldPerGroup : (t.groups ? round1(t.finalCount/t.groups) : 0);
+  const belowPlan = eligible.filter(x=>trainerConv(x)!=null && trainerConv(x)<m.planConv1to5);
+  const abovePlan = eligible.filter(x=>trainerConv(x)!=null && trainerConv(x)>=m.planConv1to5);
+  const highLeft = eligible.filter(x=>(x.leftRate||0) >= Math.max(leftRate, 60));
+  const highFell = eligible.filter(x=>(x.fellShare||0) >= 15);
+  const topYield = [...eligible].sort((a,b)=>(b.yieldPerGroup||0)-(a.yieldPerGroup||0))[0];
+  const topContrib = [...eligible].sort((a,b)=>(b.finalCount||0)-(a.finalCount||0))[0];
+  const strengths = [];
+  const weaknesses = [];
+  if(t.conv1to5!=null && t.conv1to5>=m.planConv1to5) strengths.push(`Конверсия компании ${t.conv1to5}% ≥ плана ${m.planConv1to5}%`);
+  else weaknesses.push(`Конверсия компании ${t.conv1to5}% ниже плана ${m.planConv1to5}%`);
+  if(leftRate<=55) strengths.push(`Отсев «ушли сами» ${leftRate}% — в рабочем диапазоне`);
+  else weaknesses.push(`Высокий отсев «ушли сами»: ${leftRate}% от day1`);
+  if((t.fellApartShare||0)<=8) strengths.push(`Распад групп ${t.fellApartShare||0}% — под контролем`);
+  else weaknesses.push(`Доля распавшихся групп ${t.fellApartShare||0}% — зона риска`);
+  if(abovePlan.length) strengths.push(`${abovePlan.length} тренер(ов) на/выше плана 1→5`);
+  if(belowPlan.length) weaknesses.push(`${belowPlan.length} тренер(ов) ниже плана 1→5`);
+  if(highFell.length) weaknesses.push(`Высокий распад у: ${highFell.slice(0,3).map(x=>x.name).join(', ')}`);
+  if(topContrib) strengths.push(`Главный вклад в выход: ${topContrib.name} (${topContrib.day1}→${topContrib.finalCount})`);
+  if(topYield) strengths.push(`Лучший выход/группу: ${topYield.name} (${topYield.yieldPerGroup})`);
+  if(highLeft.length>=3) weaknesses.push(`Слабое удержание у ${highLeft.length} тренеров (ушли ≥${Math.max(leftRate,60)}%)`);
+  return { leftRate, refuseRate, transferRate, yieldPerGroup, trainers, eligible, belowPlan, abovePlan, strengths, weaknesses, topContrib, topYield };
+}
+
 function renderBadgeLegend(){
   const m = metrics();
   el('badgeLegend').innerHTML = `
-    <span>Конв. 1→5:</span>
-    <span class="badge success">≥${m.badgeHigh}% хорошо</span>
-    <span class="badge warning">${m.badgeLow}–${m.badgeHigh-0.1}% средне</span>
-    <span class="badge danger"><${m.badgeLow}% низко</span>
+    <span>TQI v2 + конв.:</span>
+    <span class="badge success">≥${m.badgeHigh} хорошо</span>
+    <span class="badge warning">${m.badgeLow}–${m.badgeHigh-0.1} средне</span>
+    <span class="badge danger"><${m.badgeLow} низко</span>
     <span class="badge neutral">распалась</span>
-    <span style="color:var(--text-muted);">план ${m.planConv1to5}%</span>
+    <span style="color:var(--text-muted);">план 1→5 ${m.planConv1to5}%</span>
   `;
 }
 
@@ -465,19 +562,15 @@ function aggregateFromGroups(groups, raw){
     if(g.conv2!==null && g.conv2!==undefined){ t.conv2Sum += g.conv2; t.conv2Count += 1; }
     if(g.conv3!==null && g.conv3!==undefined){ t.conv3Sum += g.conv3; t.conv3Count += 1; }
   });
-  const byTrainer = Object.values(byTrainerMap).sort((a,b)=>a.name.localeCompare(b.name,'ru')).map(t=>{
-    const row = {
-      name:t.name, groups:t.groups, fellApart:t.fellApart, day1:t.day1, leftSelf:t.leftSelf, refused:t.refused,
-      transferred:t.transferred, finalCount:t.finalCount,
-      conv1to5: t.conv1to5Count>0 ? round1(t.conv1to5Sum/t.conv1to5Count) : null,
-      conv1to5Weighted: t.day1>0 ? round1(t.finalCount/t.day1*100) : null,
-      fellApartConv1to5: t.fellApartDay1>0 ? round1(t.fellApartFinal/t.fellApartDay1*100) : null,
-      conv2: t.conv2Count>0 ? round1(t.conv2Sum/t.conv2Count) : null,
-      conv3: t.conv3Count>0 ? round1(t.conv3Sum/t.conv3Count) : null
-    };
-    row.score = computeTrainerScore(row, (raw.metrics && raw.metrics.rankWeights) || null);
-    return row;
-  });
+  const byTrainerRaw = Object.values(byTrainerMap).map(t=>({
+    name:t.name, groups:t.groups, fellApart:t.fellApart, day1:t.day1, leftSelf:t.leftSelf, refused:t.refused,
+    transferred:t.transferred, finalCount:t.finalCount,
+    conv1to5: t.conv1to5Count>0 ? round1(t.conv1to5Sum/t.conv1to5Count) : null,
+    conv1to5Weighted: t.day1>0 ? round1(t.finalCount/t.day1*100) : null,
+    fellApartConv1to5: t.fellApartDay1>0 ? round1(t.fellApartFinal/t.fellApartDay1*100) : null,
+    conv2: t.conv2Count>0 ? round1(t.conv2Sum/t.conv2Count) : null,
+    conv3: t.conv3Count>0 ? round1(t.conv3Sum/t.conv3Count) : null
+  }));
 
   const monthOrder = [];
   const byMonthMap = {};
@@ -500,29 +593,36 @@ function aggregateFromGroups(groups, raw){
     };
   });
 
+  const totals = {
+    groups: groups.length,
+    notGathered: null,
+    fellApart,
+    fellApartDay1,
+    fellApartFinalCount,
+    fellApartConv1to5,
+    fellApartShare,
+    day1, day2Start, day3Start, leftSelf, refused, transferred, finalCount,
+    conv1to5: day1>0 ? round1(finalCount/day1*100) : 0,
+    leftSelfRate: day1>0 ? round1(leftSelf/day1*100) : 0,
+    refuseRate: day1>0 ? round1(refused/day1*100) : 0,
+    transferRate: day1>0 ? round1(transferred/day1*100) : 0,
+    yieldPerGroup: groups.length>0 ? round1(finalCount/groups.length) : 0,
+    avgDay1PerGroup: groups.length>0 ? round1(day1/groups.length) : 0
+  };
+
   return {
     schemaVersion: raw.schemaVersion,
     updatedAt: raw.updatedAt,
     metrics: raw.metrics,
     periodFiltered: true,
-    totals: {
-      groups: groups.length,
-      notGathered: null,
-      fellApart,
-      fellApartDay1,
-      fellApartFinalCount,
-      fellApartConv1to5,
-      fellApartShare,
-      day1, day2Start, day3Start, leftSelf, refused, transferred, finalCount,
-      conv1to5: day1>0 ? round1(finalCount/day1*100) : 0
-    },
+    totals,
     funnel: [
       {label:'1-й день', value: day1},
       {label:'2-й день', value: day2Start},
       {label:'3-й день', value: day3Start},
       {label:'Выход на линию', value: finalCount}
     ],
-    byTrainer,
+    byTrainer: rankedTrainers(byTrainerRaw, totals),
     byMonth,
     groups,
     allByMonth: raw.byMonth || []
@@ -531,15 +631,27 @@ function aggregateFromGroups(groups, raw){
 
 function buildViewData(raw, month){
   if(!month){
+    const totals = Object.assign({}, raw.totals || {}, {
+      leftSelfRate: raw.totals && raw.totals.leftSelfRate!=null ? raw.totals.leftSelfRate
+        : pct(raw.totals && raw.totals.leftSelf, raw.totals && raw.totals.day1),
+      refuseRate: raw.totals && raw.totals.refuseRate!=null ? raw.totals.refuseRate
+        : pct(raw.totals && raw.totals.refused, raw.totals && raw.totals.day1),
+      transferRate: raw.totals && raw.totals.transferRate!=null ? raw.totals.transferRate
+        : pct(raw.totals && raw.totals.transferred, raw.totals && raw.totals.day1),
+      yieldPerGroup: raw.totals && raw.totals.yieldPerGroup!=null ? raw.totals.yieldPerGroup
+        : (raw.totals && raw.totals.groups ? round1(raw.totals.finalCount/raw.totals.groups) : 0)
+    });
+    const byTrainerBase = (raw.byTrainer||[]).map(t=>({
+      ...t,
+      fellApart: t.fellApart!=null ? t.fellApart : 0,
+      conv1to5Weighted: t.conv1to5Weighted!=null ? t.conv1to5Weighted
+        : (t.day1>0 ? round1(t.finalCount/t.day1*100) : null)
+    }));
     return Object.assign({}, raw, {
       periodFiltered: false,
       allByMonth: raw.byMonth || [],
-      byTrainer: (raw.byTrainer||[]).map(t=>withTrainerScore({
-        ...t,
-        fellApart: t.fellApart!=null ? t.fellApart : 0,
-        conv1to5Weighted: t.conv1to5Weighted!=null ? t.conv1to5Weighted
-          : (t.day1>0 ? round1(t.finalCount/t.day1*100) : null)
-      })),
+      totals,
+      byTrainer: rankedTrainers(byTrainerBase, totals),
       byMonth: (raw.byMonth||[]).map(m=>({
         ...m,
         day1: m.day1!=null ? m.day1 : null,
@@ -682,11 +794,15 @@ function exportActiveTabCsv(){
   const tab = document.querySelector('.tab-btn.active')?.dataset.tab || 'overview';
   const stamp = new Date().toISOString().slice(0,10);
   if(tab === 'trainers'){
-    const rows = [['Тренер','TQI','Групп','Распалось','1й день','Ушли сами','Отказали','Перенесли','Итог','Конв взвеш','Конв ср%','Конв распавш','Конв 2→5','Конв 3→5']];
-    viewData.byTrainer.map(withTrainerScore).forEach(t=>rows.push([
-      t.name, t.score, t.groups, t.fellApart||0, t.day1, t.leftSelf, t.refused, t.transferred, t.finalCount,
-      t.conv1to5Weighted, t.conv1to5, t.fellApartConv1to5, t.conv2, t.conv3
-    ]));
+    const rows = [['Место','Тренер','TQI v2','Групп','Day1','Итог','Выход/гр','Вклад %','Распалось','Ушли %','Конв 1→5','Конв 2→5','Конв 3→5','Качество','Надёжность','ВкладЧасть','YieldЧасть','Стабильность']];
+    rankedTrainers(viewData.byTrainer, viewData.totals).forEach(t=>{
+      const p = t.scoreParts || {};
+      rows.push([
+        t.rank, t.name, t.score, t.groups, t.day1, t.finalCount, t.yieldPerGroup, t.contributionShare,
+        t.fellApart||0, t.leftRate, t.conv1to5Weighted, t.conv2, t.conv3,
+        p.quality, p.reliability, p.contribution, p.yield, p.stability
+      ]);
+    });
     downloadCsv(`trainers_${stamp}.csv`, rows);
     return;
   }
@@ -938,7 +1054,8 @@ function renderOverview(data){
     : (!showMomOnTotals && prev && prev.fellApart!=null ? deltaHtml(t.fellApart||0, prev.fellApart||0, {invert:true, note}) : deltaHtml(null, null, {note}));
 
   const scope = ctx.scope;
-  const fellByTrainer = [...data.byTrainer].filter(tr=>(tr.fellApart||0)>0)
+  const insights = companyInsights(data);
+  const fellByTrainer = [...insights.trainers].filter(tr=>(tr.fellApart||0)>0)
     .sort((a,b)=>(b.fellApart||0)-(a.fellApart||0)).slice(0,5);
   const monthsForFell = data.allByMonth || data.byMonth || [];
 
@@ -954,11 +1071,21 @@ function renderOverview(data){
     </div>
     <div class="kpi-grid">
       <div class="kpi-card"><div class="scope">${scope}</div><div class="label">Всего групп</div><div class="value">${t.groups}</div><div class="sub">${notHeld} · распавшиеся внутри</div>${groupsDelta}</div>
-      <div class="kpi-card ${t.conv1to5>=m.planConv1to5?'success':'danger'}"><div class="scope">${scope}</div><div class="label">Конверсия 1→5 (взвеш.)</div><div class="value">${t.conv1to5}%</div><div class="sub">цель ${m.planConv1to5}% · считаем final ÷ day1</div>${convDelta}</div>
-      <div class="kpi-card warning"><div class="scope">${scope}</div><div class="label">Распалось групп</div><div class="value">${t.fellApart!=null?t.fellApart:0}</div><div class="sub">${fellShare}% от учтённых · конв. ${fellConv}</div>${fellDelta}</div>
-      <div class="kpi-card danger"><div class="scope">${scope}</div><div class="label">Ушли сами</div><div class="value">${t.leftSelf}</div><div class="sub">${pct(t.leftSelf,t.day1)}% от вышедших на 1-й день</div>${leftDelta}</div>
-      <div class="kpi-card"><div class="scope">${scope}</div><div class="label">Отказали мы</div><div class="value">${t.refused}</div><div class="sub">${pct(t.refused,t.day1)}% от вышедших на 1-й день</div>${refusedDelta}</div>
-      <div class="kpi-card accent"><div class="scope">${scope}</div><div class="label">Вышло на линию</div><div class="value">${t.finalCount}</div><div class="sub">из ${t.day1} человек на 1-м дне</div>${finalDelta}</div>
+      <div class="kpi-card ${t.conv1to5>=m.planConv1to5?'success':'danger'}"><div class="scope">${scope}</div><div class="label">Конверсия 1→5 (взвеш.)</div><div class="value">${t.conv1to5}%</div><div class="sub">цель ${m.planConv1to5}% · final ÷ day1</div>${convDelta}</div>
+      <div class="kpi-card accent"><div class="scope">${scope}</div><div class="label">Вышло на линию</div><div class="value">${t.finalCount}</div><div class="sub">${t.day1} стартовали · ${insights.yieldPerGroup}/группу</div>${finalDelta}</div>
+      <div class="kpi-card danger"><div class="scope">${scope}</div><div class="label">Ушли сами</div><div class="value">${t.leftSelf}</div><div class="sub">${insights.leftRate}% от day1</div>${leftDelta}</div>
+      <div class="kpi-card warning"><div class="scope">${scope}</div><div class="label">Распалось групп</div><div class="value">${t.fellApart!=null?t.fellApart:0}</div><div class="sub">${fellShare}% · конв. ${fellConv}</div>${fellDelta}</div>
+      <div class="kpi-card"><div class="scope">${scope}</div><div class="label">Отказали / перенесли</div><div class="value">${t.refused} / ${t.transferred}</div><div class="sub">${insights.refuseRate}% / ${insights.transferRate}% от day1</div>${refusedDelta}</div>
+    </div>
+    <div class="two-col">
+      <div class="section">
+        <div class="section-head"><h2>Сильные стороны</h2><div class="desc">Что уже работает в текущей области</div></div>
+        ${insights.strengths.map(s=>`<div class="rank-row"><span class="name" style="white-space:normal;">${s}</span><span class="badge success">+</span></div>`).join('') || '<div class="footnote">Пока без явных плюсов</div>'}
+      </div>
+      <div class="section">
+        <div class="section-head"><h2>Слабые стороны</h2><div class="desc">Куда смотреть в первую очередь</div></div>
+        ${insights.weaknesses.map(s=>`<div class="rank-row"><span class="name" style="white-space:normal;">${s}</span><span class="badge danger">!</span></div>`).join('') || '<div class="footnote">Критических зон не видно</div>'}
+      </div>
     </div>
     <div class="section"><div class="section-head"><h2>Воронка обучения</h2><div class="desc">Главное: сколько людей на каждом этапе · область: ${periodScopeLabel(data.periodFiltered)}</div></div><div class="funnel" id="funnelOverview"></div></div>
     <div class="two-col">
@@ -1034,39 +1161,70 @@ function renderOverview(data){
         </table>
       </div>
     </div>
-    <div class="three-col">
-      ${topBottomCard(data, 'Лучшие тренеры', true)}
-      ${topBottomCard(data, 'Требуют внимания', false)}
+    ${fullTrainerRankSection(data, insights)}
+    <div class="two-col" style="margin-top:14px;">
       ${monthSummaryMiniCard(data)}
+      <div class="section">
+        <div class="section-head"><h2>Компания: старт → осталось</h2><div class="desc">Связка объёма и результата в области</div></div>
+        <div class="mini-kpi-grid cols-3">
+          <div class="mini-kpi"><div class="label">Стартовали</div><div class="value">${t.day1}</div></div>
+          <div class="mini-kpi"><div class="label">Осталось на линии</div><div class="value">${t.finalCount}</div></div>
+          <div class="mini-kpi"><div class="label">Выход / группу</div><div class="value">${insights.yieldPerGroup}</div></div>
+        </div>
+        <div class="footnote" style="margin-top:10px;">Средний day1/группу: ${t.avgDay1PerGroup!=null?t.avgDay1PerGroup:(t.groups?round1(t.day1/t.groups):'—')} · отсев суммарно ${pct((t.leftSelf||0)+(t.refused||0)+(t.transferred||0), t.day1)}% от старта</div>
+      </div>
     </div>
   </div>`;
   el('content').innerHTML = html;
   renderFunnelInto('funnelOverview', data.funnel);
   renderTrendChart('trendChart', data.periodFiltered ? data.byMonth : (dashboardData.byMonth||[]));
   renderPieChart('pieChart', t);
+  document.querySelectorAll('#rankBody tr[data-trainer]').forEach(tr=>{
+    tr.addEventListener('click', ()=>openTrainerDetail(tr.dataset.trainer));
+  });
 }
 
 function trainerConv(t){
   return t.conv1to5Weighted!=null ? t.conv1to5Weighted : t.conv1to5;
 }
 
-function topBottomCard(data, title, top){
+function fullTrainerRankSection(data, insights){
   const m = metrics();
-  const sorted = [...data.byTrainer].map(withTrainerScore).filter(trainerRankEligible)
-    .sort((a,b)=> top ? b.score-a.score : a.score-b.score).slice(0,4);
-  const desc = top
-    ? `Индекс TQI (конверсии + отсев + стабильность) · ${periodScopeLabel(data.periodFiltered)}`
-    : `Ниже по TQI · ${periodScopeLabel(data.periodFiltered)}`;
-  let rows = sorted.map(t => `
-    <div class="rank-row">
-      <span class="name">${t.name}</span>
-      <span style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
-        <span class="badge ${pctBadgeClass(t.score)}">${t.score}</span>
-        <span style="font-size:10px;color:var(--text-muted);">1→5 ${trainerConv(t)!=null?trainerConv(t)+'%':'—'}</span>
-      </span>
-    </div>`).join('');
-  const minNote = `нужно ≥${m.rankMinGroups||2} группы и ≥${m.rankMinDay1||10} чел. на 1-м дне`;
-  return `<div class="section"><div class="section-head"><h2>${title}</h2><div class="desc">${desc}</div></div>${rows || `<div class="footnote">Недостаточно данных (${minNote})</div>`}<div class="footnote" style="margin-top:10px;">TQI = 45%·1→5 + 15%·2→5 + 10%·3→5 + 20%·удержание + 5%·отказы + 5%·стабильность</div></div>`;
+  const rows = insights.trainers;
+  const body = rows.map(t=>{
+    const place = t.rank!=null ? t.rank : '—';
+    const tone = !t.rankEligible ? '' : (t.rank<=3 ? 'success' : (t.rank>=rows.filter(x=>x.rankEligible).length-1 ? 'danger' : ''));
+    const parts = t.scoreParts || {};
+    return `<tr data-trainer="${t.name}" style="${!t.rankEligible?'opacity:.72;':''}">
+      <td><span class="badge ${tone||'neutral'}">${place}</span></td>
+      <td>${t.name}${!t.rankEligible?' <span style="color:var(--text-muted);font-size:11px;">мало данных</span>':''}</td>
+      <td><span class="badge ${pctBadgeClass(t.score)}">${t.score!=null?t.score:'—'}</span></td>
+      <td>${t.groups}</td>
+      <td>${t.day1} → ${t.finalCount}</td>
+      <td>${t.yieldPerGroup!=null?t.yieldPerGroup:'—'}</td>
+      <td>${t.contributionShare!=null?t.contributionShare+'%':'—'}</td>
+      <td><span class="badge ${pctBadgeClass(trainerConv(t))}">${trainerConv(t)!=null?trainerConv(t)+'%':'—'}</span></td>
+      <td>${t.leftRate!=null?t.leftRate+'%':'—'}</td>
+      <td>${t.fellShare!=null?t.fellShare+'%':'—'}</td>
+      <td style="font-size:11px;color:var(--text-muted);">${parts.quality!=null?`К${parts.quality}`:''} ${parts.contribution!=null?`В${parts.contribution}`:''} ${parts.reliability!=null?`Н${parts.reliability}`:''}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="11" style="font-family:var(--font-body);color:var(--text-muted);">Нет тренеров</td></tr>';
+
+  return `<div class="section">
+    <div class="section-head">
+      <h2>Полный рейтинг тренеров (TQI v2)</h2>
+      <div class="desc">Гибрид: качество воронки 50% · надёжность выборки 15% · вклад в выход компании 20% · выход/группу 10% · стабильность 5% · ${periodScopeLabel(data.periodFiltered)}</div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="dropout-table" id="rankTable">
+        <thead><tr>
+          <th>#</th><th>Тренер</th><th>TQI</th><th>Гр.</th><th>Day1 → итог</th><th>Выход/гр</th><th>Вклад</th><th>1→5</th><th>Ушли %</th><th>Распад %</th><th>Части</th>
+        </tr></thead>
+        <tbody id="rankBody">${body}</tbody>
+      </table>
+    </div>
+    <div class="footnote">Место считается при ≥${m.rankMinGroups||2} группах и ≥${m.rankMinDay1||10} чел. на 1-м дне. «Части»: К=качество, В=вклад, Н=надёжность выборки. Клик по строке — карточка тренера.</div>
+  </div>`;
 }
 function monthSummaryMiniCard(data){
   const months = dashboardData.byMonth || [];
@@ -1125,9 +1283,9 @@ function renderTrainersTab(data){
       <div>
         <div class="eyebrow">Вкладка тренеров</div>
         <div class="headline">${data.periodFiltered ? `Тренеры за месяц «${periodMonth}»` : 'Тренеры за весь период'}</div>
-        <div class="support">Рейтинг по умолчанию — индекс TQI (все конверсии + отсев + стабильность). «Конв. взвеш.» — только 1→5 (final ÷ day1).</div>
+        <div class="support">Рейтинг TQI v2: качество воронки + вклад (day1→итог) + надёжность выборки + выход/группу + стабильность. Полный список — на вкладке «Обзор».</div>
       </div>
-      <div class="side-note">Клик по строке открывает карточку. Сортировка по заголовку.</div>
+      <div class="side-note">Клик по строке — карточка. Сортировка по заголовку.</div>
     </div>
     <div class="section">
       <div class="section-head"><h2>Таблица тренеров</h2><div class="desc">Сортировка по заголовку · поиск по имени</div></div>
@@ -1141,20 +1299,23 @@ function renderTrainersTab(data){
 }
 
 function renderTrainerTable(data){
-  let trainers = [...data.byTrainer];
+  let trainers = rankedTrainers(data.byTrainer, data.totals);
   const search = (el('trainerSearch') && el('trainerSearch').value.toLowerCase()) || '';
   if(search) trainers = trainers.filter(t=>t.name.toLowerCase().includes(search));
   trainers.sort((a,b)=>{
     let av=a[trainerSortState.key], bv=b[trainerSortState.key];
-    if(av===null||av===undefined) av=-1; if(bv===null||bv===undefined) bv=-1;
+    if(trainerSortState.key==='rank'){
+      av = av!=null ? av : 9999; bv = bv!=null ? bv : 9999;
+    } else {
+      if(av===null||av===undefined) av=-1; if(bv===null||bv===undefined) bv=-1;
+    }
     if(typeof av==='string') return trainerSortState.dir==='asc'? av.localeCompare(bv,'ru'): bv.localeCompare(av,'ru');
     return trainerSortState.dir==='asc'? av-bv : bv-av;
   });
-  trainers = trainers.map(withTrainerScore);
   const cols = [
-    ['name','Тренер'],['score','TQI'],['groups','Групп'],['fellApart','Распалось'],['day1','1-й день'],
-    ['leftSelf','Ушли сами'],['refused','Отказали'],['transferred','Перенесли'],['finalCount','Итог'],
-    ['conv1to5Weighted','Конв. взвеш.'],['conv1to5','Конв. ср.%'],['conv2','Конв. 2→5'],['conv3','Конв. 3→5']
+    ['rank','#'],['name','Тренер'],['score','TQI v2'],['groups','Групп'],['day1','Day1'],['finalCount','Итог'],
+    ['yieldPerGroup','Выход/гр'],['contributionShare','Вклад %'],['fellApart','Распалось'],
+    ['leftRate','Ушли %'],['conv1to5Weighted','Конв. 1→5'],['conv2','Конв. 2→5'],['conv3','Конв. 3→5']
   ];
   el('trainerHeadRow').innerHTML = cols.map(([key,label])=>{
     const arrow = trainerSortState.key===key ? (trainerSortState.dir==='asc'?' ↑':' ↓') : '';
@@ -1162,17 +1323,21 @@ function renderTrainerTable(data){
   }).join('');
   el('trainerBody').innerHTML = trainers.map(t=>`
     <tr data-trainer="${t.name}">
+      <td><span class="badge ${t.rank!=null && t.rank<=3?'success':(t.rankEligible?'neutral':'')}">${t.rank!=null?t.rank:'—'}</span></td>
       <td>${t.name}</td>
       <td><span class="badge ${pctBadgeClass(t.score)}">${t.score!=null?t.score:'—'}</span></td>
-      <td>${t.groups}</td><td>${t.fellApart||0}</td><td>${t.day1}</td><td>${t.leftSelf}</td><td>${t.refused}</td><td>${t.transferred}</td><td>${t.finalCount}</td>
+      <td>${t.groups}</td><td>${t.day1}</td><td>${t.finalCount}</td>
+      <td>${t.yieldPerGroup!=null?t.yieldPerGroup:'—'}</td>
+      <td>${t.contributionShare!=null?t.contributionShare+'%':'—'}</td>
+      <td>${t.fellApart||0}</td>
+      <td>${t.leftRate!=null?t.leftRate+'%':'—'}</td>
       <td><span class="badge ${pctBadgeClass(t.conv1to5Weighted)}">${t.conv1to5Weighted!=null?t.conv1to5Weighted+'%':'—'}</span></td>
-      <td>${t.conv1to5!=null?t.conv1to5+'%':'—'}</td>
       <td>${t.conv2!=null?t.conv2+'%':'—'}</td><td>${t.conv3!=null?t.conv3+'%':'—'}</td>
     </tr>`).join('');
   document.querySelectorAll('#trainerHeadRow th').forEach(th=>th.addEventListener('click', ()=>{
     const key = th.dataset.key;
     if(trainerSortState.key===key) trainerSortState.dir = trainerSortState.dir==='asc'?'desc':'asc';
-    else { trainerSortState.key=key; trainerSortState.dir='desc'; }
+    else { trainerSortState.key=key; trainerSortState.dir = key==='rank' ? 'asc' : 'desc'; }
     renderTrainerTable(viewData);
   }));
   document.querySelectorAll('#trainerBody tr').forEach(tr=>tr.addEventListener('click', ()=>openTrainerDetail(tr.dataset.trainer)));
@@ -1180,12 +1345,14 @@ function renderTrainerTable(data){
 
 function openTrainerDetail(name, opts={}){
   const data = viewData;
-  const trainer = withTrainerScore(data.byTrainer.find(t=>t.name===name) || {});
-  if(!trainer.name) return;
+  const trainer = rankedTrainers(data.byTrainer, data.totals).find(t=>t.name===name)
+    || withTrainerScore(data.byTrainer.find(t=>t.name===name) || {}, scoreContextFromTotals(data.totals));
+  if(!trainer || !trainer.name) return;
   const groups = data.groups.filter(g=>g.trainer===name);
   const overallConv = data.totals.conv1to5;
   const tw = trainerConv(trainer);
   const diff = tw!==null ? round1(tw-overallConv) : null;
+  const parts = trainer.scoreParts || {};
 
   const byMonth = {};
   groups.forEach(g=>{
@@ -1211,17 +1378,23 @@ function openTrainerDetail(name, opts={}){
       </div>
     </div>
     <div class="mini-kpi-grid">
-      <div class="mini-kpi"><div class="label">Индекс TQI</div><div class="value">${trainer.score!=null?trainer.score:'—'}</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">составной рейтинг</div>
+      <div class="mini-kpi"><div class="label">Место / TQI v2</div><div class="value">${trainer.rank!=null?trainer.rank:'—'} · ${trainer.score!=null?trainer.score:'—'}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${trainer.rankEligible?'в рейтинге':'мало данных для места'}</div>
       </div>
-      <div class="mini-kpi"><div class="label">Групп / распалось</div><div class="value">${trainer.groups} / ${trainer.fellApart||0}</div></div>
+      <div class="mini-kpi"><div class="label">Day1 → итог</div><div class="value">${trainer.day1} → ${trainer.finalCount}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">вклад ${trainer.contributionShare!=null?trainer.contributionShare+'%':'—'} · ${trainer.yieldPerGroup!=null?trainer.yieldPerGroup:'—'}/гр</div>
+      </div>
       <div class="mini-kpi"><div class="label">Конв. взвеш. 1→5</div><div class="value">${tw!=null?tw+'%':'—'}</div>
         ${diff!==null ? `<div class="compare-row ${diff>=0?'up':'down'}">${diff>=0?'▲':'▼'} ${Math.abs(diff)}% к периоду</div>` : ''}
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">ср.% групп: ${trainer.conv1to5!=null?trainer.conv1to5+'%':'—'}</div>
       </div>
-      <div class="mini-kpi"><div class="label">1-й день → выход</div><div class="value">${trainer.day1} → ${trainer.finalCount}</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">ушли сами: ${trainer.leftSelf}</div>
+      <div class="mini-kpi"><div class="label">Групп / распад / ушли</div><div class="value">${trainer.groups} / ${trainer.fellApart||0}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">ушли ${trainer.leftRate!=null?trainer.leftRate+'%':'—'}</div>
       </div>
+    </div>
+    <div class="mini-kpi-grid cols-3" style="margin-top:-8px;">
+      <div class="mini-kpi"><div class="label">Качество</div><div class="value">${parts.quality!=null?parts.quality:'—'}</div></div>
+      <div class="mini-kpi"><div class="label">Вклад / надёжность</div><div class="value">${parts.contribution!=null?parts.contribution:'—'} / ${parts.reliability!=null?parts.reliability:'—'}</div></div>
+      <div class="mini-kpi"><div class="label">Yield / стабильность</div><div class="value">${parts.yield!=null?parts.yield:'—'} / ${parts.stability!=null?parts.stability:'—'}</div></div>
     </div>
     <div class="mini-kpi-grid cols-3" style="margin-top:-8px;">
       <div class="mini-kpi"><div class="label">Отказали / перенесли</div><div class="value">${trainer.refused} / ${trainer.transferred}</div></div>
