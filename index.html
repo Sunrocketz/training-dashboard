@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Контроль штата обучения — дашборд</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root{
+    --bg:#F6F7F9; --surface:#FFFFFF; --surface-2:#F1F3F6; --surface-3:#E9ECF1;
+    --border:#E2E5EA; --border-soft:#EDEFF2;
+    --text-primary:#1B1E27; --text-secondary:#5B6472; --text-muted:#8E96A3;
+    --accent:#4457E8; --accent-soft:#EEF1FE; --accent-dark:#2F3FBF;
+    --success:#12876F; --success-soft:#E4F6F1;
+    --warning:#B7791F; --warning-soft:#FCF1DE;
+    --danger:#C7304C; --danger-soft:#FCE7EB;
+    --font-display:'Space Grotesk', sans-serif;
+    --font-body:'Inter', sans-serif;
+    --font-mono:'JetBrains Mono', monospace;
+    --shadow:0 1px 2px rgba(20,24,34,.04), 0 1px 1px rgba(20,24,34,.03);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--bg); color:var(--text-primary); font-family:var(--font-body);
+    min-height:100vh; padding:32px 24px 80px;
+  }
+  .wrap{max-width:1220px; margin:0 auto;}
+
+  header{
+    display:flex; justify-content:space-between; align-items:flex-start;
+    margin-bottom:22px; gap:24px; flex-wrap:wrap;
+  }
+  .title-block h1{
+    font-family:var(--font-display); font-weight:600; font-size:26px; letter-spacing:-0.01em;
+  }
+  .title-block p{color:var(--text-secondary); font-size:14px; margin-top:4px;}
+  .status-block{display:flex; flex-direction:column; align-items:flex-end; gap:8px;}
+  .status-pill{
+    display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-secondary);
+    background:var(--surface); border:1px solid var(--border); border-radius:100px;
+    padding:6px 14px; box-shadow:var(--shadow);
+  }
+  .dot{width:7px; height:7px; border-radius:50%; background:var(--text-muted); flex-shrink:0;}
+  .dot.live{background:var(--success); box-shadow:0 0 0 3px var(--success-soft);}
+  .dot.error{background:var(--danger); box-shadow:0 0 0 3px var(--danger-soft);}
+  .btn{
+    font-family:var(--font-body); font-size:13px; font-weight:500; color:var(--text-primary);
+    background:var(--surface); border:1px solid var(--border); border-radius:8px;
+    padding:7px 14px; cursor:pointer; transition:background .15s, border-color .15s;
+  }
+  .btn:hover{background:var(--surface-2);}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .btn.primary:hover{background:var(--accent-dark);}
+
+  #config{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow);
+    padding:16px 18px; margin-bottom:20px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+  }
+  #config label{font-size:13px; color:var(--text-secondary); white-space:nowrap;}
+  #config input[type=text]{
+    flex:1; min-width:260px; background:var(--surface-2); border:1px solid var(--border);
+    border-radius:8px; color:var(--text-primary); font-family:var(--font-mono); font-size:13px;
+    padding:9px 12px;
+  }
+  #config input[type=text]:focus{outline:none; border-color:var(--accent);}
+  #config .hint{width:100%; font-size:12px; color:var(--text-muted); margin-top:2px;}
+
+  /* ---- tabs ---- */
+  .tabs{display:flex; gap:4px; margin-bottom:20px; background:var(--surface-2); border-radius:10px; padding:4px; width:fit-content;}
+  .tab-btn{
+    font-family:var(--font-body); font-size:13px; font-weight:500; color:var(--text-secondary);
+    background:transparent; border:none; border-radius:7px; padding:8px 16px; cursor:pointer;
+    transition:all .15s;
+  }
+  .tab-btn.active{background:var(--surface); color:var(--text-primary); box-shadow:var(--shadow);}
+  .tab-panel{display:none;}
+  .tab-panel.active{display:block;}
+
+  .kpi-grid{display:grid; grid-template-columns:repeat(5, 1fr); gap:12px; margin-bottom:20px;}
+  .kpi-card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; box-shadow:var(--shadow);}
+  .kpi-card .label{font-size:12px; color:var(--text-secondary); margin-bottom:8px;}
+  .kpi-card .value{font-family:var(--font-display); font-size:26px; font-weight:600; letter-spacing:-0.01em;}
+  .kpi-card .sub{font-size:12px; margin-top:4px; color:var(--text-muted);}
+  .kpi-card.accent .value{color:var(--accent);}
+  .kpi-card.success .value{color:var(--success);}
+  .kpi-card.danger .value{color:var(--danger);}
+
+  .section{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:22px 24px; margin-bottom:16px; box-shadow:var(--shadow);}
+  .section-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:10px;}
+  .section-head h2{font-family:var(--font-display); font-size:16px; font-weight:600;}
+  .section-head .desc{font-size:12px; color:var(--text-muted);}
+
+  .funnel{display:flex; flex-direction:column; gap:10px;}
+  .funnel-row{display:flex; align-items:center; gap:14px;}
+  .funnel-label{width:150px; font-size:13px; color:var(--text-secondary); flex-shrink:0;}
+  .funnel-track{flex:1; height:34px; background:var(--surface-2); border-radius:8px; overflow:hidden;}
+  .funnel-fill{
+    height:100%; background:linear-gradient(90deg, var(--accent), #7C93FF);
+    display:flex; align-items:center; justify-content:flex-end; padding-right:12px;
+    border-radius:8px; transition:width .6s ease;
+  }
+  .funnel-fill span{font-family:var(--font-mono); font-size:13px; font-weight:600; color:#fff;}
+  .funnel-drop{width:80px; text-align:right; font-family:var(--font-mono); font-size:12px; color:var(--text-muted); flex-shrink:0;}
+
+  .two-col{display:grid; grid-template-columns:1.3fr 1fr; gap:16px;}
+  .three-col{display:grid; grid-template-columns:repeat(3, 1fr); gap:16px;}
+
+  .table-controls{display:flex; gap:10px; margin-bottom:14px;}
+  .table-controls input{flex:1; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; color:var(--text-primary); font-size:13px; padding:8px 12px;}
+  .table-controls input:focus{outline:none; border-color:var(--accent);}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  thead th{text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--text-muted); font-weight:500; padding:0 10px 10px; cursor:pointer; white-space:nowrap;}
+  thead th:hover{color:var(--text-secondary);}
+  tbody td{padding:11px 10px; border-top:1px solid var(--border-soft); font-family:var(--font-mono); white-space:nowrap;}
+  tbody td:first-child{font-family:var(--font-body); font-weight:500;}
+  tbody tr{cursor:pointer; transition:background .1s;}
+  tbody tr:hover{background:var(--accent-soft);}
+  .badge{font-size:11px; padding:2px 8px; border-radius:100px; font-family:var(--font-body); font-weight:500; white-space:nowrap;}
+  .badge.success{background:var(--success-soft); color:var(--success);}
+  .badge.warning{background:var(--warning-soft); color:var(--warning);}
+  .badge.danger{background:var(--danger-soft); color:var(--danger);}
+
+  .placeholder{display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px 20px; color:var(--text-muted); text-align:center; gap:10px;}
+  .placeholder .big{font-size:15px; color:var(--text-secondary);}
+
+  /* ---- detail panel ---- */
+  #detailOverlay{
+    display:none; position:fixed; inset:0; background:rgba(20,24,34,.35); z-index:50;
+    align-items:flex-start; justify-content:center; padding:40px 20px; overflow-y:auto;
+  }
+  #detailOverlay.open{display:flex;}
+  #detailPanel{
+    background:var(--surface); border-radius:16px; max-width:820px; width:100%;
+    padding:28px 30px; box-shadow:0 20px 60px rgba(20,24,34,.2); animation:slideUp .2s ease;
+  }
+  @keyframes slideUp{from{transform:translateY(12px); opacity:0;} to{transform:translateY(0); opacity:1;}}
+  .detail-head{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px;}
+  .detail-head h2{font-family:var(--font-display); font-size:20px; font-weight:600;}
+  .detail-head .close-btn{background:var(--surface-2); border:none; border-radius:8px; width:32px; height:32px; cursor:pointer; font-size:16px; color:var(--text-secondary);}
+  .detail-head .close-btn:hover{background:var(--surface-3);}
+  .mini-kpi-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:20px;}
+  .mini-kpi{background:var(--surface-2); border-radius:10px; padding:12px 14px;}
+  .mini-kpi .label{font-size:11px; color:var(--text-muted);}
+  .mini-kpi .value{font-family:var(--font-display); font-size:19px; font-weight:600; margin-top:2px;}
+  .compare-row{display:flex; align-items:center; gap:8px; font-size:12px; margin-top:2px;}
+  .compare-row.up{color:var(--success);} .compare-row.down{color:var(--danger);}
+
+  /* ---- month cards ---- */
+  .month-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:14px;}
+  .month-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px;
+    cursor:pointer; transition:box-shadow .15s, border-color .15s; box-shadow:var(--shadow);
+  }
+  .month-card:hover{border-color:var(--accent); box-shadow:0 4px 14px rgba(68,87,232,.12);}
+  .month-card h3{font-family:var(--font-display); font-size:16px; font-weight:600; margin-bottom:10px;}
+  .month-card .row{display:flex; justify-content:space-between; font-size:12px; color:var(--text-secondary); margin-bottom:4px;}
+  .month-card .row b{color:var(--text-primary); font-family:var(--font-mono);}
+
+  @media (max-width:900px){
+    .kpi-grid{grid-template-columns:repeat(2,1fr);}
+    .two-col, .three-col{grid-template-columns:1fr;}
+    .mini-kpi-grid{grid-template-columns:repeat(2,1fr);}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="title-block">
+      <h1>Контроль штата обучения</h1>
+      <p>Воронка конверсии, отсев и результаты по тренерам и месяцам</p>
+    </div>
+    <div class="status-block">
+      <div class="status-pill">
+        <div class="dot" id="statusDot"></div>
+        <span id="statusText">Не подключено</span>
+      </div>
+      <button class="btn" id="refreshBtn">Обновить</button>
+    </div>
+  </header>
+
+  <div id="config">
+    <label for="urlInput">Ссылка на веб-сервис (Apps Script /exec)</label>
+    <input type="text" id="urlInput" placeholder="https://script.google.com/macros/s/.../exec">
+    <button class="btn primary" id="connectBtn">Подключить</button>
+    <div class="hint">Впиши ссылку и нажми «Подключить». Автообновление — раз в сутки, в 08:00 по Москве.</div>
+    <div class="hint" id="nextRefreshLabel"></div>
+  </div>
+
+  <div class="tabs" id="tabs" style="display:none;">
+    <button class="tab-btn active" data-tab="overview">Обзор</button>
+    <button class="tab-btn" data-tab="trainers">По тренерам</button>
+    <button class="tab-btn" data-tab="months">По месяцам</button>
+  </div>
+
+  <div id="content">
+    <div class="placeholder">
+      <div class="big">Данные ещё не загружены</div>
+      <div>Вставь ссылку на веб-сервис выше и нажми «Подключить»</div>
+    </div>
+  </div>
+</div>
+
+<div id="detailOverlay">
+  <div id="detailPanel"></div>
+</div>
+
+<script>
+const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNjs7MKzbt9Fw/exec';
+
+let dashboardData = null;
+let refreshTimeout = null, refreshInterval = null;
+let trainerSortState = { key: 'conv1to5', dir: 'desc' };
+const DAY_MS = 24*60*60*1000;
+const el = (id) => document.getElementById(id);
+let charts = {};
+
+function destroyChart(key){ if(charts[key]){ charts[key].destroy(); delete charts[key]; } }
+
+function getNextRefreshTime(){
+  const now = new Date();
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 5,0,0));
+  if(next.getTime() <= now.getTime()) next.setUTCDate(next.getUTCDate()+1);
+  return next;
+}
+function updateNextRefreshLabel(nextDate){
+  const label = el('nextRefreshLabel'); if(!label) return;
+  label.textContent = 'Следующее автообновление: ' + nextDate.toLocaleString('ru-RU', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit', timeZone:'Europe/Moscow'}) + ' МСК';
+}
+function startAutoRefresh(url){
+  if(refreshTimeout) clearTimeout(refreshTimeout);
+  if(refreshInterval) clearInterval(refreshInterval);
+  const next = getNextRefreshTime();
+  updateNextRefreshLabel(next);
+  refreshTimeout = setTimeout(() => {
+    fetchData(url);
+    updateNextRefreshLabel(getNextRefreshTime());
+    refreshInterval = setInterval(() => { fetchData(url); updateNextRefreshLabel(getNextRefreshTime()); }, DAY_MS);
+  }, next.getTime() - Date.now());
+}
+
+function setStatus(state, text){
+  const dot = el('statusDot');
+  dot.className = 'dot' + (state==='live' ? ' live' : state==='error' ? ' error' : '');
+  el('statusText').textContent = text;
+}
+
+async function fetchData(url){
+  setStatus('', 'Загрузка...');
+  try{
+    const res = await fetch(url, {cache:'no-store'});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data = await res.json();
+    dashboardData = data;
+    el('tabs').style.display = 'flex';
+    renderOverview(data);
+    renderTrainersTab(data);
+    renderMonthsTab(data);
+    setStatus('live', 'Обновлено в ' + new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}));
+  }catch(err){
+    setStatus('error', 'Ошибка подключения');
+    if(!dashboardData){
+      el('content').innerHTML = '<div class="placeholder"><div class="big">Не удалось получить данные</div><div>Проверь ссылку и настройки доступа веб-приложения</div></div>';
+    }
+  }
+}
+
+el('connectBtn').addEventListener('click', () => {
+  const url = el('urlInput').value.trim(); if(!url) return;
+  fetchData(url); startAutoRefresh(url);
+});
+el('refreshBtn').addEventListener('click', () => {
+  const url = el('urlInput').value.trim(); if(url) fetchData(url);
+});
+if(DEFAULT_APPS_SCRIPT_URL){
+  el('urlInput').value = DEFAULT_APPS_SCRIPT_URL;
+  el('config').style.display = 'none';
+  fetchData(DEFAULT_APPS_SCRIPT_URL);
+  startAutoRefresh(DEFAULT_APPS_SCRIPT_URL);
+}
+
+// ---- tabs ----
+function initTabsOnce(){
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+      btn.classList.add('active');
+      el('panel-'+btn.dataset.tab).classList.add('active');
+    });
+  });
+}
+
+function pctBadgeClass(value, low, high){
+  if(value===null||value===undefined) return '';
+  if(value>=high) return 'success';
+  if(value>=low) return 'warning';
+  return 'danger';
+}
+function pct(part, whole){ return whole ? Math.round((part/whole)*1000)/10 : 0; }
+
+// ============ ОБЗОР ============
+function renderOverview(data){
+  const t = data.totals;
+  let html = `
+  <div id="panel-overview" class="tab-panel active">
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="label">Всего групп</div><div class="value">${t.groups}</div><div class="sub">${t.notGathered+t.fellApart} не состоялось</div></div>
+      <div class="kpi-card ${t.conv1to5>=30?'success':'danger'}"><div class="label">Конверсия 1→5 день</div><div class="value">${t.conv1to5}%</div><div class="sub">план 30%</div></div>
+      <div class="kpi-card danger"><div class="label">Ушли сами</div><div class="value">${t.leftSelf}</div><div class="sub">${pct(t.leftSelf,t.day1)}% от вышедших</div></div>
+      <div class="kpi-card"><div class="label">Отказали мы</div><div class="value">${t.refused}</div><div class="sub">${pct(t.refused,t.day1)}% от вышедших</div></div>
+      <div class="kpi-card accent"><div class="label">Вышло на линию</div><div class="value">${t.finalCount}</div><div class="sub">из ${t.day1} на 1-й день</div></div>
+    </div>
+    <div class="section"><div class="section-head"><h2>Воронка обучения</h2><div class="desc">кол-во учеников на каждом этапе</div></div><div class="funnel" id="funnelOverview"></div></div>
+    <div class="two-col">
+      <div class="section"><div class="section-head"><h2>Динамика по месяцам</h2><div class="desc">конверсия 1→5 день</div></div><div style="position:relative;height:220px;"><canvas id="trendChart"></canvas></div></div>
+      <div class="section"><div class="section-head"><h2>Структура отсева</h2><div class="desc">всего ${t.leftSelf+t.refused+t.transferred}</div></div><div style="position:relative;height:220px;"><canvas id="pieChart"></canvas></div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:12px;font-size:12px;color:var(--text-secondary);">
+          <span style="display:flex;align-items:center;gap:5px;"><span style="width:9px;height:9px;border-radius:2px;background:#C7304C;"></span>Ушли сами ${t.leftSelf}</span>
+          <span style="display:flex;align-items:center;gap:5px;"><span style="width:9px;height:9px;border-radius:2px;background:#B7791F;"></span>Отказали мы ${t.refused}</span>
+          <span style="display:flex;align-items:center;gap:5px;"><span style="width:9px;height:9px;border-radius:2px;background:#4457E8;"></span>Перенесли ${t.transferred}</span>
+        </div>
+      </div>
+    </div>
+    <div class="three-col">
+      ${topBottomCard(data, 'Лучшие тренеры (конв. 1→5)', true)}
+      ${topBottomCard(data, 'Требуют внимания (конв. 1→5)', false)}
+      ${monthSummaryMiniCard(data)}
+    </div>
+  </div>`;
+  el('content').innerHTML = html;
+  initTabsOnce();
+  renderFunnelInto('funnelOverview', data.funnel);
+  renderTrendChart('trendChart', data.byMonth);
+  renderPieChart('pieChart', t);
+}
+
+function topBottomCard(data, title, top){
+  const sorted = [...data.byTrainer].filter(t=>t.conv1to5!==null && t.groups>=2)
+    .sort((a,b)=> top ? b.conv1to5-a.conv1to5 : a.conv1to5-b.conv1to5).slice(0,4);
+  let rows = sorted.map(t => `<div class="month-card-row" style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-top:1px solid var(--border-soft);"><span>${t.name}</span><span class="badge ${pctBadgeClass(t.conv1to5,20,30)}">${t.conv1to5}%</span></div>`).join('');
+  return `<div class="section"><div class="section-head"><h2>${title}</h2></div>${rows || '<div style="color:var(--text-muted);font-size:13px;">Недостаточно данных</div>'}</div>`;
+}
+function monthSummaryMiniCard(data){
+  const months = data.byMonth;
+  const last = months[months.length-1];
+  if(!last) return '<div class="section"><div class="section-head"><h2>Последний месяц</h2></div><div style="color:var(--text-muted);font-size:13px;">Нет данных</div></div>';
+  return `<div class="section"><div class="section-head"><h2>Последний месяц: ${last.month}</h2></div>
+    <div class="mini-kpi-grid" style="grid-template-columns:1fr 1fr;">
+      <div class="mini-kpi"><div class="label">Групп</div><div class="value">${last.groups}</div></div>
+      <div class="mini-kpi"><div class="label">Конв. 1→5</div><div class="value">${last.conv1to5!==null?last.conv1to5+'%':'—'}</div></div>
+    </div></div>`;
+}
+
+function renderFunnelInto(elId, funnel){
+  const max = funnel[0].value || 1;
+  let html = '';
+  funnel.forEach((step,i)=>{
+    const widthPct = Math.max(6, Math.round((step.value/max)*100));
+    let dropText='';
+    if(i>0){ const prev=funnel[i-1].value; const drop = prev>0 ? Math.round((1-step.value/prev)*1000)/10 : 0; dropText='−'+drop+'%'; }
+    html += `<div class="funnel-row"><div class="funnel-label">${step.label}</div><div class="funnel-track"><div class="funnel-fill" style="width:${widthPct}%"><span>${step.value}</span></div></div><div class="funnel-drop">${dropText}</div></div>`;
+  });
+  el(elId).innerHTML = html;
+}
+
+function renderTrendChart(canvasId, months){
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId); if(!ctx) return;
+  charts[canvasId] = new Chart(ctx, {
+    type:'line',
+    data:{ labels: months.map(m=>m.month), datasets:[{ label:'Конверсия 1→5', data: months.map(m=>m.conv1to5), borderColor:'#4457E8', backgroundColor:'rgba(68,87,232,0.08)', fill:true, tension:.3, pointRadius:4, pointBackgroundColor:'#4457E8' }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{ticks:{color:'#8E96A3', callback:v=>v+'%'}, grid:{color:'#EDEFF2'}}, x:{ticks:{color:'#8E96A3'}, grid:{display:false}} } }
+  });
+}
+function renderPieChart(canvasId, t){
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId); if(!ctx) return;
+  charts[canvasId] = new Chart(ctx, {
+    type:'doughnut',
+    data:{ labels:['Ушли сами','Отказали мы','Перенесли'], datasets:[{ data:[t.leftSelf,t.refused,t.transferred], backgroundColor:['#C7304C','#B7791F','#4457E8'], borderColor:'#FFFFFF', borderWidth:3 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}} }
+  });
+}
+
+// ============ ПО ТРЕНЕРАМ ============
+function renderTrainersTab(data){
+  let html = `<div id="panel-trainers" class="tab-panel">
+    <div class="section">
+      <div class="section-head"><h2>Все тренеры</h2><div class="desc">клик по строке — подробная карточка</div></div>
+      <div class="table-controls"><input type="text" id="trainerSearch" placeholder="Поиск по имени тренера..."></div>
+      <div style="overflow-x:auto;"><table><thead><tr id="trainerHeadRow"></tr></thead><tbody id="trainerBody"></tbody></table></div>
+    </div>
+  </div>`;
+  el('content').insertAdjacentHTML('beforeend', html);
+  renderTrainerTable(data);
+  el('trainerSearch').addEventListener('input', ()=>renderTrainerTable(dashboardData));
+}
+
+function renderTrainerTable(data){
+  let trainers = [...data.byTrainer];
+  const search = (el('trainerSearch') && el('trainerSearch').value.toLowerCase()) || '';
+  if(search) trainers = trainers.filter(t=>t.name.toLowerCase().includes(search));
+  trainers.sort((a,b)=>{
+    let av=a[trainerSortState.key], bv=b[trainerSortState.key];
+    if(av===null) av=-1; if(bv===null) bv=-1;
+    if(typeof av==='string') return trainerSortState.dir==='asc'? av.localeCompare(bv): bv.localeCompare(av);
+    return trainerSortState.dir==='asc'? av-bv : bv-av;
+  });
+  const cols = [['name','Тренер'],['groups','Групп'],['day1','1-й день'],['leftSelf','Ушли сами'],['refused','Отказали'],['transferred','Перенесли'],['finalCount','Итог'],['conv1to5','Конв. 1→5'],['conv2','Конв. 2→5'],['conv3','Конв. 3→5']];
+  el('trainerHeadRow').innerHTML = cols.map(([key,label])=>{
+    const arrow = trainerSortState.key===key ? (trainerSortState.dir==='asc'?' ↑':' ↓') : '';
+    return `<th data-key="${key}">${label}${arrow}</th>`;
+  }).join('');
+  el('trainerBody').innerHTML = trainers.map(t=>`
+    <tr data-trainer="${t.name}">
+      <td>${t.name}</td><td>${t.groups}</td><td>${t.day1}</td><td>${t.leftSelf}</td><td>${t.refused}</td><td>${t.transferred}</td><td>${t.finalCount}</td>
+      <td><span class="badge ${pctBadgeClass(t.conv1to5,20,30)}">${t.conv1to5!==null?t.conv1to5+'%':'—'}</span></td>
+      <td>${t.conv2!==null?t.conv2+'%':'—'}</td><td>${t.conv3!==null?t.conv3+'%':'—'}</td>
+    </tr>`).join('');
+  document.querySelectorAll('#trainerHeadRow th').forEach(th=>th.addEventListener('click', ()=>{
+    const key = th.dataset.key;
+    if(trainerSortState.key===key) trainerSortState.dir = trainerSortState.dir==='asc'?'desc':'asc';
+    else { trainerSortState.key=key; trainerSortState.dir='desc'; }
+    renderTrainerTable(dashboardData);
+  }));
+  document.querySelectorAll('#trainerBody tr').forEach(tr=>tr.addEventListener('click', ()=>openTrainerDetail(tr.dataset.trainer)));
+}
+
+function openTrainerDetail(name){
+  const data = dashboardData;
+  const trainer = data.byTrainer.find(t=>t.name===name);
+  const groups = data.groups.filter(g=>g.trainer===name);
+  const overallConv = data.totals.conv1to5;
+  const diff = trainer.conv1to5!==null ? Math.round((trainer.conv1to5-overallConv)*10)/10 : null;
+
+  const byMonth = {};
+  groups.forEach(g=>{
+    if(!byMonth[g.month]) byMonth[g.month] = {month:g.month, day1:0, finalCount:0, groups:0};
+    byMonth[g.month].day1 += g.day1; byMonth[g.month].finalCount += g.finalCount; byMonth[g.month].groups += 1;
+  });
+  const monthTrend = Object.values(byMonth).map(m=>({month:m.month, conv1to5: m.day1>0? Math.round(m.finalCount/m.day1*1000)/10 : null}));
+
+  const funnel = [
+    {label:'1-й день', value: groups.reduce((s,g)=>s+g.day1,0)},
+    {label:'2-й день', value: groups.reduce((s,g)=>s+g.day2Start,0)},
+    {label:'3-й день', value: groups.reduce((s,g)=>s+g.day3Start,0)},
+    {label:'Выход на линию', value: groups.reduce((s,g)=>s+g.finalCount,0)}
+  ];
+
+  el('detailPanel').innerHTML = `
+    <div class="detail-head"><h2>${name}</h2><button class="close-btn" id="closeDetail">✕</button></div>
+    <div class="mini-kpi-grid">
+      <div class="mini-kpi"><div class="label">Групп проведено</div><div class="value">${trainer.groups}</div></div>
+      <div class="mini-kpi"><div class="label">Конв. 1→5</div><div class="value">${trainer.conv1to5!==null?trainer.conv1to5+'%':'—'}</div>
+        ${diff!==null ? `<div class="compare-row ${diff>=0?'up':'down'}">${diff>=0?'▲':'▼'} ${Math.abs(diff)}% к среднему</div>` : ''}</div>
+      <div class="mini-kpi"><div class="label">Ушли сами</div><div class="value">${trainer.leftSelf}</div></div>
+      <div class="mini-kpi"><div class="label">Отказали мы</div><div class="value">${trainer.refused}</div></div>
+    </div>
+    <div class="section-head"><h2>Воронка тренера</h2></div>
+    <div class="funnel" id="trainerFunnel" style="margin-bottom:22px;"></div>
+    <div class="section-head"><h2>Динамика по месяцам</h2></div>
+    <div style="position:relative;height:180px;margin-bottom:10px;"><canvas id="trainerTrendChart"></canvas></div>
+  `;
+  renderFunnelInto('trainerFunnel', funnel);
+  destroyChart('trainerTrendChart');
+  const ctx = document.getElementById('trainerTrendChart');
+  charts['trainerTrendChart'] = new Chart(ctx, {
+    type:'bar',
+    data:{ labels: monthTrend.map(m=>m.month), datasets:[{ label:'Конверсия 1→5', data: monthTrend.map(m=>m.conv1to5), backgroundColor:'#4457E8', borderRadius:5 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{ticks:{color:'#8E96A3', callback:v=>v+'%'}, grid:{color:'#EDEFF2'}}, x:{ticks:{color:'#8E96A3'}, grid:{display:false}} } }
+  });
+  el('detailOverlay').classList.add('open');
+  el('closeDetail').addEventListener('click', closeDetail);
+}
+
+function closeDetail(){ el('detailOverlay').classList.remove('open'); destroyChart('trainerTrendChart'); }
+el('detailOverlay').addEventListener('click', (e)=>{ if(e.target.id==='detailOverlay') closeDetail(); });
+
+// ============ ПО МЕСЯЦАМ ============
+function renderMonthsTab(data){
+  let html = `<div id="panel-months" class="tab-panel">
+    <div class="section"><div class="section-head"><h2>Месяцы обучения</h2><div class="desc">клик по карточке — подробности за месяц</div></div>
+    <div class="month-grid" id="monthGrid"></div></div>
+  </div>`;
+  el('content').insertAdjacentHTML('beforeend', html);
+  el('monthGrid').innerHTML = data.byMonth.map(m=>`
+    <div class="month-card" data-month="${m.month}">
+      <h3>${m.month}</h3>
+      <div class="row"><span>Групп</span><b>${m.groups}</b></div>
+      <div class="row"><span>Конв. 1→5</span><b>${m.conv1to5!==null?m.conv1to5+'%':'—'}</b></div>
+    </div>`).join('');
+  document.querySelectorAll('.month-card').forEach(c=>c.addEventListener('click', ()=>openMonthDetail(c.dataset.month)));
+}
+
+function openMonthDetail(month){
+  const data = dashboardData;
+  const groups = data.groups.filter(g=>g.month===month);
+  const day1 = groups.reduce((s,g)=>s+g.day1,0);
+  const day2 = groups.reduce((s,g)=>s+g.day2Start,0);
+  const day3 = groups.reduce((s,g)=>s+g.day3Start,0);
+  const final = groups.reduce((s,g)=>s+g.finalCount,0);
+  const leftSelf = groups.reduce((s,g)=>s+g.leftSelf,0);
+  const refused = groups.reduce((s,g)=>s+g.refused,0);
+  const conv = day1>0 ? Math.round(final/day1*1000)/10 : 0;
+
+  const byTrainer = {};
+  groups.forEach(g=>{
+    if(!byTrainer[g.trainer]) byTrainer[g.trainer] = {name:g.trainer, day1:0, finalCount:0, groups:0};
+    byTrainer[g.trainer].day1 += g.day1; byTrainer[g.trainer].finalCount += g.finalCount; byTrainer[g.trainer].groups += 1;
+  });
+  const trainerRows = Object.values(byTrainer).map(t=>({...t, conv: t.day1>0? Math.round(t.finalCount/t.day1*1000)/10 : null}))
+    .sort((a,b)=>(b.conv||0)-(a.conv||0));
+
+  el('detailPanel').innerHTML = `
+    <div class="detail-head"><h2>${month}</h2><button class="close-btn" id="closeDetail">✕</button></div>
+    <div class="mini-kpi-grid">
+      <div class="mini-kpi"><div class="label">Групп</div><div class="value">${groups.length}</div></div>
+      <div class="mini-kpi"><div class="label">Конв. 1→5</div><div class="value">${conv}%</div></div>
+      <div class="mini-kpi"><div class="label">Ушли сами</div><div class="value">${leftSelf}</div></div>
+      <div class="mini-kpi"><div class="label">Отказали мы</div><div class="value">${refused}</div></div>
+    </div>
+    <div class="section-head"><h2>Воронка месяца</h2></div>
+    <div class="funnel" id="monthFunnel" style="margin-bottom:22px;"></div>
+    <div class="section-head"><h2>Тренеры в этом месяце</h2></div>
+    <div style="max-height:260px;overflow-y:auto;">
+      ${trainerRows.map(t=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-top:1px solid var(--border-soft);">
+        <span>${t.name} <span style="color:var(--text-muted);">(${t.groups} гр.)</span></span>
+        <span class="badge ${pctBadgeClass(t.conv,20,30)}">${t.conv!==null?t.conv+'%':'—'}</span></div>`).join('')}
+    </div>
+  `;
+  renderFunnelInto('monthFunnel', [
+    {label:'1-й день', value: day1}, {label:'2-й день', value: day2}, {label:'3-й день', value: day3}, {label:'Выход на линию', value: final}
+  ]);
+  el('detailOverlay').classList.add('open');
+  el('closeDetail').addEventListener('click', closeDetail);
+}
+</script>
+</body>
+</html>
