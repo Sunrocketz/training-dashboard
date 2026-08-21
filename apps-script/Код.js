@@ -37,7 +37,7 @@ var DASHBOARD_SHEET_NAME = 'Дашборд';               // название �
 var DATA_START_ROW = 1;   // с какой строки начинать чтение
 var DATA_END_ROW = 500;   // до какой строки читать (с запасом)
 var LAST_COLUMN = 'R';    // последняя колонка с данными
-var API_CACHE_KEY = 'dashboard_json_v4';
+var API_CACHE_KEY = 'dashboard_json_v5';
 var API_CACHE_TTL_SEC = 300; // 5 минут — повторные открытия дашборда без пересчёта листа
 // =================================================================
 
@@ -70,7 +70,9 @@ function collectDashboardData() {
   var range = sourceSheet.getRange('A' + DATA_START_ROW + ':' + LAST_COLUMN + endRow);
   var values = range.getValues();
 
-  // validEntry = { row, fellApart }; «не собралась» исключаем, «распалась» — в valid с меткой
+  // validEntry = { row, fellApart, completed }; «не собралась» исключаем, «распалась» — в valid с меткой
+  var tz = Session.getScriptTimeZone();
+  var todayKey = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
   var validGroups = [];
   var notGathered = 0;
   var fellApart = 0;
@@ -87,8 +89,14 @@ function collectDashboardData() {
     }
     var isFellApart = comment.indexOf('распалась') !== -1;
     if (isFellApart) fellApart++;
-    validGroups.push({ row: row, fellApart: isFellApart });
+    validGroups.push({
+      row: row,
+      fellApart: isFellApart,
+      completed: isFellApart || isLineDateReached(row[COL.lineDate], todayKey, tz)
+    });
   }
+
+  var completedGroups = validGroups.filter(function(e) { return e.completed; });
 
   // ---- по тренерам ----
   var byTrainer = {};
@@ -97,7 +105,8 @@ function collectDashboardData() {
     var trainer = normalizeName(row[COL.trainer]);
     if (!byTrainer[trainer]) {
       byTrainer[trainer] = {
-        name: trainer, groups: 0, fellApart: 0, day1Total: 0, leftSelf: 0, refused: 0,
+        name: trainer, groups: 0, groupsCompleted: 0, groupsInProgress: 0,
+        fellApart: 0, day1Total: 0, leftSelf: 0, refused: 0,
         transferred: 0, finalCount: 0, fellApartDay1: 0, fellApartFinal: 0,
         conv1to5Sum: 0, conv2Sum: 0, conv3Sum: 0,
         conv2Count: 0, conv3Count: 0
@@ -105,6 +114,11 @@ function collectDashboardData() {
     }
     var t = byTrainer[trainer];
     t.groups += 1;
+    if (!entry.completed) {
+      t.groupsInProgress += 1;
+      return;
+    }
+    t.groupsCompleted += 1;
     if (entry.fellApart) {
       t.fellApart += 1;
       t.fellApartDay1 += Number(row[COL.day1]) || 0;
@@ -129,15 +143,17 @@ function collectDashboardData() {
     return {
       name: t.name,
       groups: t.groups,
+      groupsCompleted: t.groupsCompleted,
+      groupsInProgress: t.groupsInProgress,
       fellApart: t.fellApart,
       day1: t.day1Total,
       leftSelf: t.leftSelf,
       refused: t.refused,
       transferred: t.transferred,
       finalCount: t.finalCount,
-      // среднее % по группам (историческое поле)
-      conv1to5: t.groups > 0 ? round1(t.conv1to5Sum / t.groups * 100) : null,
-      // взвешенная конверсия: сумма final / сумма day1 (как totals.conv1to5)
+      // среднее % по законченным группам (историческое поле)
+      conv1to5: t.groupsCompleted > 0 ? round1(t.conv1to5Sum / t.groupsCompleted * 100) : null,
+      // взвешенная конверсия: сумма final / сумма day1 законченных
       conv1to5Weighted: t.day1Total > 0 ? round1(t.finalCount / t.day1Total * 100) : null,
       fellApartConv1to5: t.fellApartDay1 > 0 ? round1(t.fellApartFinal / t.fellApartDay1 * 100) : null,
       conv2: t.conv2Count > 0 ? round1(t.conv2Sum / t.conv2Count * 100) : null,
@@ -154,13 +170,19 @@ function collectDashboardData() {
     var month = label.split(',')[0].trim() || 'Без месяца';
     if (!byMonth[month]) {
       byMonth[month] = {
-        month: month, groups: 0, fellApart: 0, day1Total: 0, finalCount: 0,
+        month: month, groups: 0, groupsCompleted: 0, groupsInProgress: 0,
+        fellApart: 0, day1Total: 0, finalCount: 0,
         leftSelf: 0, refused: 0, transferred: 0,
         fellApartDay1: 0, fellApartFinal: 0
       };
       monthOrder.push(month);
     }
     byMonth[month].groups += 1;
+    if (!entry.completed) {
+      byMonth[month].groupsInProgress += 1;
+      return;
+    }
+    byMonth[month].groupsCompleted += 1;
     if (entry.fellApart) {
       byMonth[month].fellApart += 1;
       byMonth[month].fellApartDay1 += Number(row[COL.day1]) || 0;
@@ -177,6 +199,8 @@ function collectDashboardData() {
     return {
       month: d.month,
       groups: d.groups,
+      groupsCompleted: d.groupsCompleted,
+      groupsInProgress: d.groupsInProgress,
       fellApart: d.fellApart,
       day1: d.day1Total,
       finalCount: d.finalCount,
@@ -196,8 +220,9 @@ function collectDashboardData() {
       label: label,
       month: month,
       trainer: normalizeName(row[COL.trainer]),
-      startDate: row[COL.startDate] instanceof Date
-        ? Utilities.formatDate(row[COL.startDate], Session.getScriptTimeZone(), 'yyyy-MM-dd') : null,
+      startDate: formatSheetDate(row[COL.startDate], tz),
+      lineDate: formatSheetDate(row[COL.lineDate], tz),
+      completed: !!entry.completed,
       fellApart: !!entry.fellApart,
       day1: Number(row[COL.day1]) || 0,
       leftSelf: Number(row[COL.leftSelf]) || 0,
@@ -212,31 +237,33 @@ function collectDashboardData() {
     };
   });
 
-  // ---- общие итоги ----
+  // ---- общие итоги: старт групп = все valid; outcome — только законченные ----
   var totalGroups = validGroups.length;
-  var totalDay1 = sumEntryColumn(validGroups, COL.day1);
-  var totalDay2Start = sumEntryColumn(validGroups, COL.day2Start);
-  var totalDay3Start = sumEntryColumn(validGroups, COL.day3Start);
-  var totalLeftSelf = sumEntryColumn(validGroups, COL.leftSelf);
-  var totalRefused = sumEntryColumn(validGroups, COL.refused);
-  var totalTransferred = sumEntryColumn(validGroups, COL.transferred);
-  var totalFinal = sumEntryColumn(validGroups, COL.finalCount);
+  var totalCompleted = completedGroups.length;
+  var totalInProgress = totalGroups - totalCompleted;
+  var totalDay1 = sumEntryColumn(completedGroups, COL.day1);
+  var totalDay2Start = sumEntryColumn(completedGroups, COL.day2Start);
+  var totalDay3Start = sumEntryColumn(completedGroups, COL.day3Start);
+  var totalLeftSelf = sumEntryColumn(completedGroups, COL.leftSelf);
+  var totalRefused = sumEntryColumn(completedGroups, COL.refused);
+  var totalTransferred = sumEntryColumn(completedGroups, COL.transferred);
+  var totalFinal = sumEntryColumn(completedGroups, COL.finalCount);
   var overallConv1to5 = totalDay1 > 0 ? round1(totalFinal / totalDay1 * 100) : 0;
 
-  var fellApartEntries = validGroups.filter(function(e) { return e.fellApart; });
+  var fellApartEntries = completedGroups.filter(function(e) { return e.fellApart; });
   var fellApartDay1 = sumEntryColumn(fellApartEntries, COL.day1);
   var fellApartFinal = sumEntryColumn(fellApartEntries, COL.finalCount);
   var fellApartConv1to5 = fellApartDay1 > 0 ? round1(fellApartFinal / fellApartDay1 * 100) : null;
-  var fellApartShare = totalGroups > 0 ? round1(fellApart / totalGroups * 100) : 0;
+  var fellApartShare = totalCompleted > 0 ? round1(fellApart / totalCompleted * 100) : 0;
   var leftSelfRate = totalDay1 > 0 ? round1(totalLeftSelf / totalDay1 * 100) : 0;
   var refuseRate = totalDay1 > 0 ? round1(totalRefused / totalDay1 * 100) : 0;
   var transferRate = totalDay1 > 0 ? round1(totalTransferred / totalDay1 * 100) : 0;
-  var yieldPerGroup = totalGroups > 0 ? round1(totalFinal / totalGroups) : 0;
-  var avgDay1PerGroup = totalGroups > 0 ? round1(totalDay1 / totalGroups) : 0;
+  var yieldPerGroup = totalCompleted > 0 ? round1(totalFinal / totalCompleted) : 0;
+  var avgDay1PerGroup = totalCompleted > 0 ? round1(totalDay1 / totalCompleted) : 0;
 
   var rankCtx = {
     totalFinal: totalFinal,
-    totalGroups: totalGroups,
+    totalGroups: totalCompleted,
     totalDay1: totalDay1
   };
   var metricsMeta = buildMetricsMeta();
@@ -246,11 +273,13 @@ function collectDashboardData() {
   trainerList = assignTrainerRanks(trainerList, metricsMeta);
 
   return {
-    schemaVersion: 4,
-    updatedAt: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss"),
+    schemaVersion: 5,
+    updatedAt: Utilities.formatDate(new Date(), tz, "yyyy-MM-dd'T'HH:mm:ss"),
     metrics: metricsMeta,
     totals: {
       groups: totalGroups,
+      groupsCompleted: totalCompleted,
+      groupsInProgress: totalInProgress,
       notGathered: notGathered,
       fellApart: fellApart,
       fellApartDay1: fellApartDay1,
@@ -303,16 +332,18 @@ function buildDashboard() {
 
   var t = data.totals;
   var summaryRows = [
-    ['Всего групп (учтено в конверсиях, вкл. распавшиеся)', t.groups],
+    ['Всего групп (старт, вкл. ещё в обучении)', t.groups],
+    ['Закончились (D ≤ сегодня или распалась)', t.groupsCompleted != null ? t.groupsCompleted : t.groups],
+    ['Ещё в обучении (не в конверсиях и выходе)', t.groupsInProgress != null ? t.groupsInProgress : 0],
     ['Групп не собралось (не в расчёте)', t.notGathered],
     ['Групп распалось (в расчёте, с меткой)', t.fellApart],
-    ['Доля распавшихся от учтённых', (t.fellApartShare != null ? t.fellApartShare : 0) + '%'],
+    ['Доля распавшихся от законченных', (t.fellApartShare != null ? t.fellApartShare : 0) + '%'],
     ['Конверсия 1→5 у распавшихся', t.fellApartConv1to5 != null ? t.fellApartConv1to5 + '%' : '—'],
-    ['Вышло на 1-й день (всего)', t.day1],
-    ['Ушли сами (всего)', t.leftSelf],
-    ['Отказали мы (всего)', t.refused],
-    ['Перенесли в другую группу (всего)', t.transferred],
-    ['Итоговый выход на линию (всего)', t.finalCount],
+    ['Вышло на 1-й день (закончившиеся группы)', t.day1],
+    ['Ушли сами (закончившиеся группы)', t.leftSelf],
+    ['Отказали мы (закончившиеся группы)', t.refused],
+    ['Перенесли в другую группу (закончившиеся группы)', t.transferred],
+    ['Итоговый выход на линию (закончившиеся группы)', t.finalCount],
     ['Общая конверсия 1→5 день', t.conv1to5 + '%']
   ];
   dash.getRange(4, 1, 1, 2).setValues([['Показатель', 'Значение']]).setFontWeight('bold').setBackground('#d9d9d9');
@@ -338,7 +369,7 @@ function buildDashboard() {
       tr.rank != null ? tr.rank : '',
       tr.name,
       tr.score != null ? tr.score : '',
-      tr.groups,
+      tr.groups + (tr.groupsInProgress ? ' (' + tr.groupsInProgress + ' в обуч.)' : ''),
       (tr.day1 || 0) + '→' + (tr.finalCount || 0),
       tr.yieldPerGroup != null ? tr.yieldPerGroup : '',
       tr.contributionShare != null ? tr.contributionShare + '%' : '',
@@ -435,6 +466,21 @@ function sumEntryColumn(entries, colIndex) {
   }, 0);
 }
 
+function formatSheetDate(value, tz) {
+  if (!(value instanceof Date)) return null;
+  return Utilities.formatDate(value, tz, 'yyyy-MM-dd');
+}
+
+function isLineDateReached(lineDate, todayKey, tz) {
+  if (!(lineDate instanceof Date)) return false;
+  return formatSheetDate(lineDate, tz) <= todayKey;
+}
+
+function outcomeGroupCount(row) {
+  if (row && row.groupsCompleted != null) return Number(row.groupsCompleted) || 0;
+  return Number(row && row.groups) || 0;
+}
+
 function parsePercent(value) {
   if (value === '' || value === null || value === undefined) return null;
   if (typeof value === 'number') return value;
@@ -461,6 +507,8 @@ function buildMetricsMeta() {
     rankScore: 'tqi_v2',
     rankMinGroups: 2,
     rankMinDay1: 10,
+    outcomeFromCompleted: true,
+    completedRule: 'lineDate<=today || fellApart',
     rankWeights: {
       quality: 0.50,
       reliability: 0.15,
@@ -479,13 +527,13 @@ function buildMetricsMeta() {
 
 function enrichTrainerRow(row, ctx, metricsMeta) {
   var day1 = Number(row.day1) || 0;
-  var groups = Number(row.groups) || 0;
+  var groupsOutcome = outcomeGroupCount(row);
   var finalCount = Number(row.finalCount) || 0;
   var leftRate = day1 > 0 ? round1((Number(row.leftSelf) || 0) / day1 * 100) : null;
   var refuseRate = day1 > 0 ? round1((Number(row.refused) || 0) / day1 * 100) : null;
   var transferRate = day1 > 0 ? round1((Number(row.transferred) || 0) / day1 * 100) : null;
-  var fellShare = groups > 0 ? round1((Number(row.fellApart) || 0) / groups * 100) : 0;
-  var yieldPerGroup = groups > 0 ? round1(finalCount / groups) : null;
+  var fellShare = groupsOutcome > 0 ? round1((Number(row.fellApart) || 0) / groupsOutcome * 100) : 0;
+  var yieldPerGroup = groupsOutcome > 0 ? round1(finalCount / groupsOutcome) : null;
   var totalFinal = ctx && ctx.totalFinal ? ctx.totalFinal : 0;
   var contributionShare = totalFinal > 0 ? round1(finalCount / totalFinal * 100) : 0;
   var scored = computeTrainerScore(row, metricsMeta, ctx);
@@ -505,7 +553,7 @@ function assignTrainerRanks(list, metricsMeta) {
   var minG = metricsMeta.rankMinGroups || 2;
   var minD = metricsMeta.rankMinDay1 || 10;
   var eligible = list.filter(function(t) {
-    return t.score != null && t.groups >= minG && (t.day1 || 0) >= minD;
+    return t.score != null && outcomeGroupCount(t) >= minG && (t.day1 || 0) >= minD;
   }).slice().sort(function(a, b) {
     if (b.score !== a.score) return b.score - a.score;
     return (b.finalCount || 0) - (a.finalCount || 0);
@@ -557,13 +605,14 @@ function computeTrainerScore(t, metricsMeta, ctx) {
   var contribution = fullAt > 0 ? clamp100(share / fullAt * 100) : 0;
 
   var totalGroups = Number(ctx.totalGroups) || 0;
+  var groupsOutcome = outcomeGroupCount(t);
   var avgYield = totalGroups > 0 ? totalFinal / totalGroups : 0;
-  var yieldG = (Number(t.groups) || 0) > 0 ? (Number(t.finalCount) || 0) / t.groups : 0;
+  var yieldG = groupsOutcome > 0 ? (Number(t.finalCount) || 0) / groupsOutcome : 0;
   // при среднем yield = 50; при 2× среднем = 100
   var yieldScore = avgYield > 0 ? clamp100((yieldG / avgYield) * 50) : 50;
 
-  var fellShare = (Number(t.groups) || 0) > 0
-    ? (Number(t.fellApart) || 0) / t.groups * 100 : 0;
+  var fellShare = groupsOutcome > 0
+    ? (Number(t.fellApart) || 0) / groupsOutcome * 100 : 0;
   var stability = clamp100(100 - fellShare);
 
   var score =

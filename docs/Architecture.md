@@ -29,7 +29,7 @@ flowchart LR
 
 - Лист `Контроль штата обучения` — построчные группы.
 - Схема колонок A–R зафиксирована в [DataModel.md](DataModel.md).
-- Комментарии строк: «не собралась» вне расчёта; «распалась» в valid с меткой (см. DataModel / ADR-011).
+- Комментарии строк: «не собралась» вне расчёта; «распалась» в valid с меткой; законченность по D ≤ сегодня (см. DataModel / ADR-014).
 
 ### 2. Apps Script (backend)
 
@@ -70,7 +70,7 @@ Cursor → clasp push [/ deploy] → Apps Script runtime
 
 ## Принципы (чтобы не копить долг)
 
-1. **Single aggregation path** — все цифры из `collectDashboardData()`. UI не пересчитывает бизнес-метрики иначе, чем показывает уже посчитанное (допустимы только presentation-aggregates из `groups[]`, согласованные с контрактом).
+1. **Single aggregation path** — все цифры из `collectDashboardData()`. UI не пересчитывает бизнес-метрики иначе, чем показывает уже посчитанное (допустимы только presentation-aggregates из `groups[]`, согласованные с контрактом; фильтр месяца повторяет правило `completed`).
 2. **Contract-first** — JSON описывается в ApiContract до/вместе с кодом.
 3. **No PII in API** — в JSON только агрегаты и метки групп/тренеров; имена учеников не отдаём.
 4. **Stable deployment URL** — обновляем существующий deployment, не плодим новые `/exec` без нужды.

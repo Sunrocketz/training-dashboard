@@ -8,7 +8,7 @@
 | Branch деплоя UI | `main` |
 | Script ID | `1jNtOi1KDqH0HltJPgBkBbZJKCvvY1191vshAxe3vZjTjquO9QG2bWphZ` |
 | Deployment @HEAD (dev/head) | `AKfycbzjxGv5RjnrwtfceJyD4AfW0GQSHd72PgUbeAcC3KxC` |
-| Deployment веб-UI (/exec, schema v4) | `AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNjs7MKzbt9Fw` |
+| Deployment веб-UI (/exec, schema v5) | `AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNjs7MKzbt9Fw` |
 | Локальный GAS | `apps-script/` |
 
 UI по умолчанию бьёт в **deployment v2** (см. `DEFAULT_APPS_SCRIPT_URL` в `index.html`).
@@ -91,7 +91,7 @@ clasp deploy -i AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNj
 1. Лист называется точно `Контроль штата обучения`?
 2. Есть даты в колонке C?
 3. Не упёрлись в `DATA_END_ROW = 500`?
-4. Комментарии: «не собралась» вне расчёта; «распалась» внутри valid с меткой — сверить DataModel / ADR-011?
+4. Комментарии: «не собралась» вне расчёта; «распалась» внутри valid; действующие (D в будущем) только в старте групп — сверить DataModel / ADR-014?
 
 ### Неверные конверсии
 
@@ -114,10 +114,11 @@ clasp login
 
 ## Смоук-чек после релиза
 
-- [ ] `GET /exec` → `schemaVersion: 4`, `metrics.rankScore: tqi_v2`, `byTrainer.rank` / `scoreParts`
-- [ ] У тренера: `contributionShare`, `yieldPerGroup`, `leftRate`; у totals — `yieldPerGroup`, `leftSelfRate`
-- [ ] UI: полный рейтинг на обзоре, блоки сильных/слабых сторон, таблица тренеров с местом
-- [ ] Netlify UI после hard refresh: статус «Обновлено…», TQI v2 числа отличаются от чистой 1→5
+- [ ] `GET /exec` → `schemaVersion: 5`, `metrics.outcomeFromCompleted: true`, у группы `completed` / `lineDate`
+- [ ] `totals.groups` ≥ `groupsCompleted`; `groupsInProgress` = разница; `finalCount` только законченные
+- [ ] KPI: «Всего групп» включает в обучении; «Вышло на линию» и конверсия — без действующих
+- [ ] У тренера: `groupsCompleted`, `yieldPerGroup` = final/законченные; TQI не считает идущие группы
+- [ ] UI: полный рейтинг на обзоре, бейдж «в обучении» в списке групп, блоки сильных/слабых сторон
 
 - [ ] Фильтр периода переключает данные; легенда порогов видна
 - [ ] В шапке видно «Данные API: …»; кнопка «Экспорт CSV» скачивает файл

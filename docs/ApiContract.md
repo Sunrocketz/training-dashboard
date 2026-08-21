@@ -5,8 +5,8 @@
 - Endpoint: `GET {WEB_APP_URL}/exec`
 - Content-Type: `application/json`
 - Auth: нет (публичный URL)
-- **schemaVersion:** `4` (текущий)
-- Кэш: Script Cache на 300с (`dashboard_json_v4`); `?refresh=1` принудительно пересчитывает
+- **schemaVersion:** `5` (текущий)
+- Кэш: Script Cache на 300с (`dashboard_json_v5`); `?refresh=1` принудительно пересчитывает
 - В ответе опционально `cache: { hit: boolean, ttlSec: number }`
 
 Текущий deployment ID (URL `/exec`):  
@@ -16,7 +16,7 @@
 
 ```ts
 type DashboardPayload = {
-  schemaVersion: number;      // сейчас 4
+  schemaVersion: number;      // сейчас 5
   updatedAt: string;
   metrics: MetricsMeta;
   totals: Totals;
@@ -34,7 +34,9 @@ type DashboardPayload = {
 | `conv1to5Totals` / `ByTrainer` / `ByMonth` | string | формулы конверсий |
 | `fellApartInValid` | boolean | «распалась» в valid |
 | `rankScore` | string | `'tqi_v2'` |
-| `rankMinGroups` / `rankMinDay1` | number | 2 / 10 |
+| `rankMinGroups` / `rankMinDay1` | number | 2 / 10; порог групп — по **законченным** |
+| `outcomeFromCompleted` | boolean | `true`: воронка/выход/TQI только по законченным |
+| `completedRule` | string | `'lineDate<=today || fellApart'` |
 | `rankWeights` | object | `quality`, `reliability`, `contribution`, `yield`, `stability` (сумма 1.0) |
 | `qualityMix` | object | доли внутри quality: `conv1to5`, `conv2`, `conv3` |
 | `contribFullAtShare` | number | доля итоговых выходов компании = 100 по оси вклада (0.25) |
@@ -45,26 +47,30 @@ type DashboardPayload = {
 
 | Поле | Тип | Смысл |
 |------|-----|-------|
-| `groups`, `day1`…`finalCount`, отсев | number | как раньше |
-| `notGathered` / `fellApart*` | number | не собралась / распалась |
-| `conv1to5` | number | взвешенная 1→5 |
-| `leftSelfRate` / `refuseRate` / `transferRate` | number | % от day1 |
-| `yieldPerGroup` | number | `finalCount/groups` |
-| `avgDay1PerGroup` | number | `day1/groups` |
+| `groups` | number | **старт групп**: все valid, включая ещё в обучении |
+| `groupsCompleted` / `groupsInProgress` | number | законченные / ещё в обучении |
+| `day1`…`finalCount`, отсев | number | только законченные группы |
+| `notGathered` / `fellApart*` | number | не собралась / распалась (распалась = законченная) |
+| `conv1to5` | number | взвешенная 1→5 по законченным |
+| `leftSelfRate` / `refuseRate` / `transferRate` | number | % от day1 законченных |
+| `yieldPerGroup` | number | `finalCount / groupsCompleted` |
+| `avgDay1PerGroup` | number | `day1 / groupsCompleted` |
 
 ## `byTrainer[]`
 
 | Поле | Тип | Смысл |
 |------|-----|-------|
-| базовые суммы / конверсии | | как в v3 |
-| `leftRate` / `refuseRate` / `transferRate` | number \| null | % от day1 тренера |
-| `fellShare` | number | % распавшихся групп |
-| `yieldPerGroup` | number \| null | final/groups |
+| `groups` | number | старты тренера (вкл. в обучении) |
+| `groupsCompleted` / `groupsInProgress` | number | законченные / в обучении |
+| day1 / final / отсев / конверсии | | только законченные |
+| `leftRate` / `refuseRate` / `transferRate` | number \| null | % от day1 законченных |
+| `fellShare` | number | % распавшихся от **законченных** |
+| `yieldPerGroup` | number \| null | final / groupsCompleted |
 | `contributionShare` | number | доля `finalCount` тренера от totals.finalCount, % |
-| `score` | number \| null | **TQI v2** 0–100 |
+| `score` | number \| null | **TQI v2** 0–100 (по законченным) |
 | `scoreParts` | object \| null | `{ quality, reliability, contribution, yield, stability }` |
 | `rank` | number \| null | место среди eligible |
-| `rankEligible` | boolean | проходит пороги min groups/day1 |
+| `rankEligible` | boolean | ≥ `rankMinGroups` **законченных** и ≥ `rankMinDay1` |
 
 ### TQI v2
 
@@ -72,8 +78,8 @@ type DashboardPayload = {
 quality      = 0.60·C15 + 0.25·C2' + 0.15·C3'
 reliability  = log(day1+1)/log(201)*100
 contribution = min(100, shareFinal / 0.25 * 100)
-yield        = min(100, (final/groups) / companyAvgYield * 50)
-stability    = 100 − fellShare%
+yield        = min(100, (final/groupsCompleted) / companyAvgYield * 50)
+stability    = 100 − fellShare%   // fellApart / groupsCompleted
 
 TQI = 0.50·quality + 0.15·reliability + 0.20·contribution
     + 0.10·yield + 0.05·stability
@@ -81,14 +87,24 @@ TQI = 0.50·quality + 0.15·reliability + 0.20·contribution
 
 UI при фильтре месяца пересчитывает score/rank той же формулой относительно totals области.
 
-## `byMonth[]` / `groups[]`
+## `byMonth[]`
 
-Как в schema v3 (+ `fellApart` на группе/месяце).
+Как totals: `groups` = старты месяца; `groupsCompleted` / `groupsInProgress`; day1/final/отсев/conv — только законченные.
+
+## `groups[]`
+
+| Поле | Тип | Смысл |
+|------|-----|-------|
+| `startDate` / `lineDate` | string \| null | `yyyy-MM-dd`, таймзона скрипта |
+| `completed` | boolean | `lineDate ≤ сегодня` **или** `fellApart` |
+| `fellApart` | boolean | комментарий содержит «распалась» |
+| day1 / final / conv* | | сырые цифры строки (для действующих в агрегаты не идут) |
 
 ## Совместимость
 
-- v4: semantic change `score` (новая формула) + новые поля; ключ кэша сменён.
-- Процесс: docs → GAS deploy → UI push.
+- v5: outcome-метрики только по законченным группам; новые поля `completed`, `lineDate`, `groupsCompleted`, `groupsInProgress`; ключ кэша `dashboard_json_v5`.
+- v4: TQI v2; ключ `dashboard_json_v4`.
+- Процесс: docs → GAS deploy → UI push. UI при отсутствии `completed` считает группу законченной (переходный кэш v4).
 
 ## Пример (фрагмент)
 

@@ -45,7 +45,7 @@ training-dashboard/
 | Модуль (логический) | Функции | Ответственность |
 |---------------------|---------|-----------------|
 | Config | `SOURCE_SHEET_NAME`, `COL`, диапазон | Константы схемы |
-| Collect | `collectDashboardData` | Фильтрация + агрегаты + payload |
+| Collect | `collectDashboardData` | Фильтрация + законченность по D + агрегаты + payload |
 | Sheet UI | `buildDashboard`, `onOpen` | Лист «Дашборд» |
 | HTTP | `doGet` | JSON response |
 | Utils | `normalizeName`, `parsePercent`, `sumColumn`, `round1` | Нормализация |

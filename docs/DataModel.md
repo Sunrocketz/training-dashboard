@@ -15,7 +15,7 @@
 | 0 | A | `monthGroup` | Метка месяца/группы; месяц = часть до `,` |
 | 1 | B | `trainer` | Тренер (нормализуется) |
 | 2 | C | `startDate` | Дата старта; **обязательна** (Date), иначе строка пропускается |
-| 3 | D | `lineDate` | Дата выхода на линию (в агрегатах API пока не используется) |
+| 3 | D | `lineDate` | Плановая дата выхода на линию; **сверка с сегодня** (закончена, если D ≤ сегодня) |
 | 4 | E | `day1` | Вышли на 1-й день |
 | 5 | F | `leftSelf` | Ушли сами |
 | 6 | G | `leftSelfPct` | % (в API напрямую не отдаётся) |
@@ -35,11 +35,20 @@
 
 1. Нет валидной даты в `startDate` → строка игнорируется полностью.
 2. `comment` содержит «не собралась» (case-insensitive) → счётчик `notGathered`, **не** в valid.
-3. Иначе → `validGroups` (участвует в конверсиях и списках). Если `comment` содержит «распалась» — группа **входит** в valid с меткой `fellApart: true` и увеличивает счётчик `fellApart`.
+3. Иначе → `validGroups` (участвует в списке стартов). Если `comment` содержит «распалась» — группа **входит** в valid с меткой `fellApart: true` и увеличивается счётчик `fellApart`.
+4. Законченная (`completed`): `fellApart` **или** `lineDate` (колонка D) ≤ сегодня (дата, таймзона `Asia/Oral`). Иначе — в обучении.
 
-Порядок проверки: сначала «не собралась» (исключение), затем флаг «распалась» внутри valid.
+Порядок проверки: сначала «не собралась» (исключение), затем флаг «распалась» внутри valid, затем сверка D с сегодня.
 
-Смысл: «не собралась» — группа не состоялась; «распалась» — старт был, цифры воронки реальные, нагрузка тренера учитывается (ADR-011).
+Смысл: «не собралась» — группа не состоялась; «распалась» — старт был, поток уже закрыт (считается законченной сразу); действующая — D ещё в будущем, в KPI только как старт группы.
+
+## Что входит в какие метрики
+
+| Набор | Кто | Куда |
+|-------|-----|------|
+| Старт групп | все valid | `totals.groups`, `byTrainer.groups`, `byMonth.groups` |
+| Outcome | только `completed` | day1, воронка, отсев, final, conv, yield, TQI, `fellApartShare` |
+| Вне расчёта | «не собралась» | только `notGathered` |
 
 ## Нормализация имени тренера
 
@@ -63,10 +72,10 @@
 
 | Сущность | Как строится |
 |----------|--------------|
-| `byTrainer` | group-by тренер; TQI v2 `score`/`rank`/`scoreParts`, rates, `yieldPerGroup`, `contributionShare` |
-| `byMonth` | group-by `month`; суммы day1/final/отсев + `fellApart` + взвешенные conv |
-| `groups` | map valid → GroupRow (`fellApart` boolean) |
-| `totals` / `funnel` | суммы + rates (`leftSelfRate`…) + `yieldPerGroup` / `avgDay1PerGroup` |
+| `byTrainer` | group-by тренер; `groups` = старты; outcome/TQI по законченным; `groupsCompleted` / `groupsInProgress` |
+| `byMonth` | group-by `month`; старты vs outcome как totals |
+| `groups` | map valid → GroupRow (`completed`, `lineDate`, `fellApart`) |
+| `totals` / `funnel` | старт = все valid; суммы/rates/yield — законченные; `groupsCompleted` / `groupsInProgress` |
 | `metrics` | TQI v2 веса, пороги бейджей, `fellApartInValid` |
 
 ## Лист-результат
