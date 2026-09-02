@@ -44,7 +44,7 @@ type DashboardPayload = {
 | `reliabilityRefDay1` | number | опорный day1 для log-шкалы (200) |
 | `badgeLow` / `badgeHigh` / `planConv1to5` | number | пороги UI |
 | `lineReview` | object | мета журнала ОС: `periodIndependent`, `scoreMin`/`scoreMax`, `badgeLow`/`badgeHigh` (3.5/4.5), `ok`, `error` |
-| `excludedTrainers` | string[] | уволенные: нет в `byTrainer` / рейтинге / оценке линии; группы в `groups` и totals |
+| `departedTrainers` | string[] | уволенные: остаются в рейтинге и линии, UI показывает «(Уволен)» |
 
 ## `totals`
 
@@ -76,8 +76,7 @@ type DashboardPayload = {
 | `rank` | number \| null | место среди eligible |
 | `rankEligible` | boolean | ≥ `rankMinGroups` **законченных** и ≥ `rankMinDay1` |
 | `lineReview` | object \| null | оценка после линии; `null` если нет склеенных строк |
-
-В `byTrainer` нет имён из `metrics.excludedTrainers`.
+| `departed` | boolean | `true` если имя в `metrics.departedTrainers` |
 
 ### `lineReview` (totals и byTrainer)
 
@@ -91,7 +90,6 @@ type DashboardPayload = {
 | `scriptYesRate` / `objectionsYesRate` / `crmYesRate` | number \| null | доля «да» среди заполненных да/нет, % |
 | `scriptFilled` / `objectionsFilled` / `crmFilled` | number | сколько ячеек да/нет удалось разобрать |
 | `unmatched` | number | только totals: строки с тренером, которого нет в обучении |
-| `excluded` | number | только totals: строки уволенных из `excludedTrainers` (не в средней компании) |
 | `skipped` | number | только totals: строки данных без имени тренера |
 
 Склейка: срез префикса «Тренер», ключ = фамилия + имя (отчество не обязательно), `ё`=`е`. Каноническое имя — из «Контроль штата обучения».
@@ -131,7 +129,7 @@ UI при фильтре месяца пересчитывает воронку 
 
 ## Совместимость
 
-- v7: TQI v3 (балл 1–5 5% + навыки да/нет 5%); кэш `dashboard_json_v7x` (уволенные вне рейтинга/линии, ADR-018).
+- v7: TQI v3 (балл 1–5 5% + навыки да/нет 5%); кэш `dashboard_json_v7d` (метка «Уволен», ADR-019).
 - v6: `lineReview` у totals/byTrainer + `metrics.lineReview`; кэш `dashboard_json_v6`. TQI без изменений.
 - v5: outcome-метрики только по законченным группам; новые поля `completed`, `lineDate`, `groupsCompleted`, `groupsInProgress`; ключ кэша `dashboard_json_v5`.
 - v4: TQI v2; ключ `dashboard_json_v4`.

@@ -44,11 +44,11 @@ training-dashboard/
 
 | Модуль (логический) | Функции | Ответственность |
 |---------------------|---------|-----------------|
-| Config | `SOURCE_SHEET_NAME`, `COL`, `LINE_REVIEW_*`, `EXCLUDED_TRAINERS`, диапазон | Константы схемы |
+| Config | `SOURCE_SHEET_NAME`, `COL`, `LINE_REVIEW_*`, `DEPARTED_TRAINERS`, диапазон | Константы схемы |
 | Collect | `collectDashboardData`, `collectLineReviewPack` | Сначала журнал ОС, затем TQI v3 + payload |
 | Sheet UI | `buildDashboard`, `onOpen` | Лист «Дашборд» |
 | HTTP | `doGet` | JSON response |
-| Utils | `normalizeName`, `foldYo`, `trainerMatchKey`, `isExcludedTrainer`, `parseScore15`, `parseYesNo`, `parsePercent`, `sumColumn`, `round1` | Нормализация |
+| Utils | `normalizeName`, `foldYo`, `trainerMatchKey`, `isDepartedTrainer`, `parseScore15`, `parseYesNo`, `parsePercent`, `sumColumn`, `round1` | Нормализация |
 
 ## Внешние модули (не в git)
 

@@ -317,7 +317,7 @@
 
 <script>
 const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNjs7MKzbt9Fw/exec';
-const LOCAL_CACHE_KEY = 'trainingDashboard:lastPayload:v5';
+const LOCAL_CACHE_KEY = 'trainingDashboard:lastPayload:v6';
 
 let dashboardData = null;
 let viewData = null;
@@ -341,7 +341,7 @@ const DEFAULT_METRICS = {
   qualityMix: { conv1to5: 0.60, conv2: 0.25, conv3: 0.15 },
   contribFullAtShare: 0.25,
   reliabilityRefDay1: 200,
-  excludedTrainers: []
+  departedTrainers: []
 };
 
 function destroyChart(key){ if(charts[key]){ charts[key].destroy(); delete charts[key]; } }
@@ -438,11 +438,18 @@ function trainerMatchKey(value){
   const parts = name.split(' ');
   return parts.length>=2 ? parts[0]+'|'+parts[1] : name;
 }
-function isExcludedTrainer(name){
-  const list = (metrics().excludedTrainers)||[];
+function isDepartedTrainer(t){
+  if(t && t.departed) return true;
+  const name = typeof t==='string' ? t : (t && t.name);
+  const list = (metrics().departedTrainers)||[];
   const key = trainerMatchKey(name);
   if(!key) return false;
   return list.some(ex=>trainerMatchKey(ex)===key);
+}
+function trainerNameLabel(t){
+  const name = typeof t==='string' ? t : (t && t.name) || '';
+  if(!isDepartedTrainer(t)) return name;
+  return `${name} <span style="color:var(--text-muted);font-size:11px;">(Уволен)</span>`;
 }
 
 function lineReviewOf(t){
@@ -580,7 +587,7 @@ function trainerRankEligible(t){
 
 function rankedTrainers(list, totals){
   const ctx = scoreContextFromTotals(totals || {});
-  const enriched = (list||[]).filter(t=>!isExcludedTrainer(t && t.name)).map(t=>enrichTrainer(t, ctx));
+  const enriched = (list||[]).map(t=>enrichTrainer(Object.assign({}, t, { departed: isDepartedTrainer(t) }), ctx));
   const eligible = enriched.filter(trainerRankEligible)
     .sort((a,b)=> b.score!==a.score ? b.score-a.score : (b.finalCount||0)-(a.finalCount||0));
   const rankByName = {};
@@ -661,7 +668,6 @@ function aggregateFromGroups(groups, raw){
 
   const byTrainerMap = {};
   groups.forEach(g=>{
-    if(isExcludedTrainer(g.trainer)) return;
     if(!byTrainerMap[g.trainer]){
       byTrainerMap[g.trainer] = {
         name:g.trainer, groups:0, groupsCompleted:0, groupsInProgress:0,
@@ -924,12 +930,12 @@ function exportActiveTabCsv(){
   const tab = document.querySelector('.tab-btn.active')?.dataset.tab || 'overview';
   const stamp = new Date().toISOString().slice(0,10);
   if(tab === 'trainers'){
-    const rows = [['Место','Тренер','TQI v3','Групп','Закончились','В обучении','Day1','Итог','Выход/гр','Вклад %','Распалось','Ушли %','Конв 1→5','Конв 2→5','Конв 3→5','ОС оценка','ОС оценок','Скрипт %','Возражения %','CRM %','Качество','Линия','Оценка кандидатов','Надёжность','ВкладЧасть','YieldЧасть','Стабильность']];
+    const rows = [['Место','Тренер','Уволен','TQI v3','Групп','Закончились','В обучении','Day1','Итог','Выход/гр','Вклад %','Распалось','Ушли %','Конв 1→5','Конв 2→5','Конв 3→5','ОС оценка','ОС оценок','Скрипт %','Возражения %','CRM %','Качество','Линия','Оценка кандидатов','Надёжность','ВкладЧасть','YieldЧасть','Стабильность']];
     rankedTrainers(viewData.byTrainer, viewData.totals).forEach(t=>{
       const p = t.scoreParts || {};
       const lr = lineReviewOf(t) || {};
       rows.push([
-        t.rank, t.name, t.score, t.groups, outcomeGroupCount(t), groupsInProgressCount(t),
+        t.rank, t.name, isDepartedTrainer(t)?'да':'', t.score, t.groups, outcomeGroupCount(t), groupsInProgressCount(t),
         t.day1, t.finalCount, t.yieldPerGroup, t.contributionShare,
         t.fellApart||0, t.leftRate, t.conv1to5Weighted, t.conv2, t.conv3,
         lr.avgScore, lr.scored, lr.scriptYesRate, lr.objectionsYesRate, lr.crmYesRate,
@@ -1172,7 +1178,7 @@ function renderLineReviewSection(data){
   const rows = trainers.map(t=>{
     const r = t.lineReview;
     return `<tr data-trainer="${t.name}">
-      <td>${t.name}</td>
+      <td>${trainerNameLabel(t)}</td>
       <td><span class="badge ${score15BadgeClass(r.avgScore)}">${r.avgScore!=null?r.avgScore:'—'}</span></td>
       <td>${r.scored||0}</td>
       <td>${r.scriptYesRate!=null?r.scriptYesRate+'%':'—'}</td>
@@ -1203,7 +1209,7 @@ function renderLineReviewSection(data){
         <tbody>${rows}</tbody>
       </table>
     </div>
-    <div class="footnote">Берём только число 1–5 из колонки подготовки. Прогноз, комментарии и ФИО учеников в API не попадают. Уволенные тренеры в таблице не показываются.${err?` ${err}.`:''}</div>
+    <div class="footnote">Берём только число 1–5 из колонки подготовки. Прогноз, комментарии и ФИО учеников в API не попадают. Уволенные остаются в таблице с меткой.${err?` ${err}.`:''}</div>
   </div>`;
 }
 
@@ -1394,7 +1400,7 @@ function fullTrainerRankSection(data, insights){
     const parts = t.scoreParts || {};
     return `<tr data-trainer="${t.name}" style="${!t.rankEligible?'opacity:.72;':''}">
       <td><span class="badge ${tone||'neutral'}">${place}</span></td>
-      <td>${t.name}${!t.rankEligible?' <span style="color:var(--text-muted);font-size:11px;">мало данных</span>':''}</td>
+      <td>${trainerNameLabel(t)}${!t.rankEligible?' <span style="color:var(--text-muted);font-size:11px;">мало данных</span>':''}</td>
       <td><span class="badge ${pctBadgeClass(t.score)}">${t.score!=null?t.score:'—'}</span></td>
       <td><span class="badge ${pctBadgeClass(trainerSkillsPct(t))}">${trainerSkillsPct(t)!=null?trainerSkillsPct(t)+'%':'—'}</span></td>
       <td>${t.groups}${groupsInProgressCount(t)?` <span style="color:var(--text-muted);font-size:11px;">/${outcomeGroupCount(t)}</span>`:''}</td>
@@ -1421,7 +1427,7 @@ function fullTrainerRankSection(data, insights){
         <tbody id="rankBody">${body}</tbody>
       </table>
     </div>
-    <div class="footnote">Место: ≥${m.rankMinGroups||2} законченных групп и ≥${m.rankMinDay1||10} чел. на 1-м дне. «Оценка кандидатов» — среднее «да» по скрипту, возражениям и CRM из журнала ОС (в TQI 5%). Свои цифры при ≥${m.rankMinLineScores||2} ответах, иначе средняя компании (весь журнал, без уволенных). «Части»: К=воронка, Л=балл 1–5, Н=оценка кандидатов. Клик — карточка.</div>
+    <div class="footnote">Место: ≥${m.rankMinGroups||2} законченных групп и ≥${m.rankMinDay1||10} чел. на 1-м дне. «Оценка кандидатов» — среднее «да» по скрипту, возражениям и CRM из журнала ОС (в TQI 5%). Свои цифры при ≥${m.rankMinLineScores||2} ответах, иначе средняя компании (весь журнал). Уволенные в рейтинге с меткой. «Части»: К=воронка, Л=балл 1–5, Н=оценка кандидатов. Клик — карточка.</div>
   </div>`;
 }
 function monthSummaryMiniCard(data){
@@ -1530,7 +1536,7 @@ function renderTrainerTable(data){
   el('trainerBody').innerHTML = trainers.map(t=>`
     <tr data-trainer="${t.name}">
       <td><span class="badge ${t.rank!=null && t.rank<=3?'success':(t.rankEligible?'neutral':'')}">${t.rank!=null?t.rank:'—'}</span></td>
-      <td>${t.name}</td>
+      <td>${trainerNameLabel(t)}</td>
       <td><span class="badge ${pctBadgeClass(t.score)}">${t.score!=null?t.score:'—'}</span></td>
       <td><span class="badge ${score15BadgeClass(t.lineReview && t.lineReview.avgScore)}">${t.lineReview && t.lineReview.avgScore!=null?t.lineReview.avgScore:'—'}</span></td>
       <td><span class="badge ${pctBadgeClass(trainerSkillsPct(t))}">${trainerSkillsPct(t)!=null?trainerSkillsPct(t)+'%':'—'}</span></td>
@@ -1604,7 +1610,7 @@ function openTrainerDetail(name, opts={}){
 
   el('detailPanel').innerHTML = `
     <div class="detail-head">
-      <h2>${name}</h2>
+      <h2>${trainerNameLabel(trainer)}</h2>
       <div class="detail-actions">
         <button class="btn" id="copyTrainerLink" type="button">Ссылка</button>
         <button class="close-btn" id="closeDetail" type="button">✕</button>
@@ -1750,7 +1756,6 @@ function openMonthDetail(month, opts={}){
 
   const byTrainer = {};
   groups.forEach(g=>{
-    if(isExcludedTrainer(g.trainer)) return;
     if(!byTrainer[g.trainer]) byTrainer[g.trainer] = {name:g.trainer, day1:0, finalCount:0, groups:0, leftSelf:0, refused:0, transferred:0};
     byTrainer[g.trainer].groups += 1;
     if(!groupCompleted(g)) return;
@@ -1787,7 +1792,7 @@ function openMonthDetail(month, opts={}){
         <thead><tr><th>Тренер</th><th>Гр.</th><th>Ушли</th><th>Отказали</th><th>Перенесли</th><th>Конв.</th></tr></thead>
         <tbody>
           ${trainerRows.map(t=>`<tr>
-            <td>${t.name}</td><td>${t.groups}</td><td>${t.leftSelf}</td><td>${t.refused}</td><td>${t.transferred}</td>
+            <td>${trainerNameLabel(t)}</td><td>${t.groups}</td><td>${t.leftSelf}</td><td>${t.refused}</td><td>${t.transferred}</td>
             <td><span class="badge ${pctBadgeClass(t.conv)}">${t.conv!=null?t.conv+'%':'—'}</span></td>
           </tr>`).join('')}
         </tbody>

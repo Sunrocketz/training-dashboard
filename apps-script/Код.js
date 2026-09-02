@@ -37,7 +37,7 @@ var DASHBOARD_SHEET_NAME = 'Дашборд';               // название �
 var DATA_START_ROW = 1;   // с какой строки начинать чтение
 var DATA_END_ROW = 500;   // до какой строки читать (с запасом)
 var LAST_COLUMN = 'R';    // последняя колонка с данными
-var API_CACHE_KEY = 'dashboard_json_v7x';
+var API_CACHE_KEY = 'dashboard_json_v7d';
 var API_CACHE_TTL_SEC = 300; // 5 минут — повторные открытия дашборда без пересчёта листа
 
 // Журнал «Выход на линию — ОС» (другая книга). Нужен доступ «Читатель» у аккаунта деплоера.
@@ -45,8 +45,8 @@ var LINE_REVIEW_SPREADSHEET_ID = '1uNE9nPtI2JxnbBSf1YQXd8BC991tkVL5nWF77YKyrmI';
 var LINE_REVIEW_SHEET_NAME = '2026';
 var LINE_REVIEW_DATA_END_ROW = 500;
 var LINE_REVIEW_LAST_COLUMN = 'M';
-// Уволенные: нет в рейтинге и оценке линии; группы остаются в воронке компании (ADR-018).
-var EXCLUDED_TRAINERS = ['Селиванова Олеся', 'Вовчак Лариса'];
+// Уволенные: остаются в рейтинге и линии, в UI метка «(Уволен)» (ADR-019).
+var DEPARTED_TRAINERS = ['Селиванова Олеся', 'Вовчак Лариса', 'Фишер Артем'];
 // =================================================================
 
 var COL = {
@@ -284,11 +284,11 @@ function collectDashboardData() {
     totalDay1: totalDay1
   };
   var metricsMeta = buildMetricsMeta();
-  trainerList = trainerList.filter(function(row) { return !isExcludedTrainer(row.name); });
   var lineReviewPack = collectLineReviewPack(trainerList.map(function(row) { return row.name; }));
   trainerList = trainerList.map(function(row) {
     return Object.assign({}, row, {
-      lineReview: lineReviewPack.byTrainer[row.name] || null
+      lineReview: lineReviewPack.byTrainer[row.name] || null,
+      departed: isDepartedTrainer(row.name)
     });
   });
   rankCtx.lineAvgScore = lineReviewPack.totals && lineReviewPack.totals.avgScore != null
@@ -401,7 +401,7 @@ function buildDashboard() {
   var trainerRows = trainersSorted.map(function(tr) {
     return [
       tr.rank != null ? tr.rank : '',
-      tr.name,
+      tr.name + (tr.departed ? ' (Уволен)' : ''),
       tr.score != null ? tr.score : '',
       tr.groups + (tr.groupsInProgress ? ' (' + tr.groupsInProgress + ' в обуч.)' : ''),
       (tr.day1 || 0) + '→' + (tr.finalCount || 0),
@@ -528,19 +528,19 @@ function trainerMatchKey(value) {
   return name;
 }
 
-function excludedTrainerKeySet() {
+function departedTrainerKeySet() {
   var set = {};
-  (EXCLUDED_TRAINERS || []).forEach(function(name) {
+  (DEPARTED_TRAINERS || []).forEach(function(name) {
     var key = trainerMatchKey(name);
     if (key) set[key] = true;
   });
   return set;
 }
 
-function isExcludedTrainer(name, keySet) {
+function isDepartedTrainer(name, keySet) {
   var key = trainerMatchKey(name);
   if (!key) return false;
-  keySet = keySet || excludedTrainerKeySet();
+  keySet = keySet || departedTrainerKeySet();
   return !!keySet[key];
 }
 
@@ -641,8 +641,7 @@ function isLineReviewDataRow(row) {
 function collectLineReviewPack(canonicalNames) {
   var emptyTotals = Object.assign(finalizeLineReviewAgg(emptyLineReviewAgg()), {
     unmatched: 0,
-    skipped: 0,
-    excluded: 0
+    skipped: 0
   });
   var fail = function(message) {
     return { ok: false, error: message, byTrainer: {}, totals: emptyTotals };
@@ -662,13 +661,11 @@ function collectLineReviewPack(canonicalNames) {
       var key = trainerMatchKey(name);
       if (key) keyToName[key] = name;
     });
-    var excludedKeys = excludedTrainerKeySet();
 
     var byKey = {};
     var company = emptyLineReviewAgg();
     var unmatched = 0;
     var skipped = 0;
-    var excluded = 0;
 
     values.forEach(function(row) {
       if (!isLineReviewDataRow(row)) return;
@@ -676,10 +673,6 @@ function collectLineReviewPack(canonicalNames) {
       var key = trainerMatchKey(trainerRaw);
       if (!key) {
         skipped += 1;
-        return;
-      }
-      if (excludedKeys[key]) {
-        excluded += 1;
         return;
       }
       var canonical = keyToName[key];
@@ -702,8 +695,7 @@ function collectLineReviewPack(canonicalNames) {
     });
     var totals = Object.assign(finalizeLineReviewAgg(company), {
       unmatched: unmatched,
-      skipped: skipped,
-      excluded: excluded
+      skipped: skipped
     });
     return { ok: true, error: null, byTrainer: byTrainer, totals: totals };
   } catch (err) {
@@ -771,7 +763,7 @@ function buildMetricsMeta() {
       badgeLow: 3.5,
       badgeHigh: 4.5
     },
-    excludedTrainers: (EXCLUDED_TRAINERS || []).slice()
+    departedTrainers: (DEPARTED_TRAINERS || []).slice()
   };
 }
 
