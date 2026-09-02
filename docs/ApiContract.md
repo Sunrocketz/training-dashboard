@@ -5,8 +5,8 @@
 - Endpoint: `GET {WEB_APP_URL}/exec`
 - Content-Type: `application/json`
 - Auth: нет (публичный URL)
-- **schemaVersion:** `5` (текущий)
-- Кэш: Script Cache на 300с (`dashboard_json_v5`); `?refresh=1` принудительно пересчитывает
+- **schemaVersion:** `6` (текущий)
+- Кэш: Script Cache на 300с (`dashboard_json_v6`); `?refresh=1` принудительно пересчитывает
 - В ответе опционально `cache: { hit: boolean, ttlSec: number }`
 
 Текущий deployment ID (URL `/exec`):  
@@ -16,7 +16,7 @@
 
 ```ts
 type DashboardPayload = {
-  schemaVersion: number;      // сейчас 5
+  schemaVersion: number;      // сейчас 6
   updatedAt: string;
   metrics: MetricsMeta;
   totals: Totals;
@@ -42,6 +42,7 @@ type DashboardPayload = {
 | `contribFullAtShare` | number | доля итоговых выходов компании = 100 по оси вклада (0.25) |
 | `reliabilityRefDay1` | number | опорный day1 для log-шкалы (200) |
 | `badgeLow` / `badgeHigh` / `planConv1to5` | number | пороги UI |
+| `lineReview` | object | мета журнала ОС: `periodIndependent`, `scoreMin`/`scoreMax`, `badgeLow`/`badgeHigh` (3.5/4.5), `ok`, `error` |
 
 ## `totals`
 
@@ -55,6 +56,7 @@ type DashboardPayload = {
 | `leftSelfRate` / `refuseRate` / `transferRate` | number | % от day1 законченных |
 | `yieldPerGroup` | number | `finalCount / groupsCompleted` |
 | `avgDay1PerGroup` | number | `day1 / groupsCompleted` |
+| `lineReview` | object | агрегаты журнала «Выход на линию — ОС» (не режется фильтром месяца) |
 
 ## `byTrainer[]`
 
@@ -71,6 +73,23 @@ type DashboardPayload = {
 | `scoreParts` | object \| null | `{ quality, reliability, contribution, yield, stability }` |
 | `rank` | number \| null | место среди eligible |
 | `rankEligible` | boolean | ≥ `rankMinGroups` **законченных** и ≥ `rankMinDay1` |
+| `lineReview` | object \| null | оценка после линии; `null` если нет склеенных строк |
+
+### `lineReview` (totals и byTrainer)
+
+Не содержит ФИО учеников, прогноза и свободного текста.
+
+| Поле | Тип | Смысл |
+|------|-----|-------|
+| `reviewed` | number | строки журнала, склеенные с тренером (totals — все склеенные) |
+| `scored` | number | из них с числом 1–5 в колонке подготовки |
+| `avgScore` | number \| null | среднее этих чисел, 1 знак; **не** округляем до целого |
+| `scriptYesRate` / `objectionsYesRate` / `crmYesRate` | number \| null | доля «да» среди заполненных да/нет, % |
+| `scriptFilled` / `objectionsFilled` / `crmFilled` | number | сколько ячеек да/нет удалось разобрать |
+| `unmatched` | number | только totals: строки с тренером, которого нет в обучении |
+| `skipped` | number | только totals: строки данных без имени тренера |
+
+Склейка: срез префикса «Тренер», ключ = фамилия + имя (отчество не обязательно). Каноническое имя — из «Контроль штата обучения».
 
 ### TQI v2
 
@@ -102,6 +121,7 @@ UI при фильтре месяца пересчитывает score/rank то
 
 ## Совместимость
 
+- v6: `lineReview` у totals/byTrainer + `metrics.lineReview`; кэш `dashboard_json_v6`. TQI без изменений.
 - v5: outcome-метрики только по законченным группам; новые поля `completed`, `lineDate`, `groupsCompleted`, `groupsInProgress`; ключ кэша `dashboard_json_v5`.
 - v4: TQI v2; ключ `dashboard_json_v4`.
 - Процесс: docs → GAS deploy → UI push. UI при отсутствии `completed` считает группу законченной (переходный кэш v4).

@@ -37,8 +37,14 @@ var DASHBOARD_SHEET_NAME = 'Дашборд';               // название �
 var DATA_START_ROW = 1;   // с какой строки начинать чтение
 var DATA_END_ROW = 500;   // до какой строки читать (с запасом)
 var LAST_COLUMN = 'R';    // последняя колонка с данными
-var API_CACHE_KEY = 'dashboard_json_v5';
+var API_CACHE_KEY = 'dashboard_json_v6';
 var API_CACHE_TTL_SEC = 300; // 5 минут — повторные открытия дашборда без пересчёта листа
+
+// Журнал «Выход на линию — ОС» (другая книга). Нужен доступ «Читатель» у аккаунта деплоера.
+var LINE_REVIEW_SPREADSHEET_ID = '1uNE9nPtI2JxnbBSf1YQXd8BC991tkVL5nWF77YKyrmI';
+var LINE_REVIEW_SHEET_NAME = '2026';
+var LINE_REVIEW_DATA_END_ROW = 500;
+var LINE_REVIEW_LAST_COLUMN = 'K';
 // =================================================================
 
 var COL = {
@@ -46,6 +52,15 @@ var COL = {
   leftSelf: 5, leftSelfPct: 6, refused: 7, refusedPct: 8,
   transferred: 9, transferredPct: 10, day2Start: 11, conv2: 12,
   finalCount: 13, conv1to5: 14, day3Start: 15, conv3: 16, comment: 17
+};
+
+var LINE_COL = {
+  employee: 1, // B — ФИО, в JSON не отдаём
+  trainer: 3,  // D
+  script: 4,   // E да/нет
+  objections: 5, // F да/нет
+  crm: 6,      // G да/нет
+  score: 10    // K подготовка 1–5; прогноз и комментарии не читаем
 };
 
 function onOpen() {
@@ -272,8 +287,19 @@ function collectDashboardData() {
   });
   trainerList = assignTrainerRanks(trainerList, metricsMeta);
 
+  var lineReviewPack = collectLineReviewPack(trainerList.map(function(row) { return row.name; }));
+  trainerList = trainerList.map(function(row) {
+    return Object.assign({}, row, {
+      lineReview: lineReviewPack.byTrainer[row.name] || null
+    });
+  });
+  metricsMeta.lineReview = Object.assign({}, metricsMeta.lineReview, {
+    ok: lineReviewPack.ok,
+    error: lineReviewPack.error
+  });
+
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     updatedAt: Utilities.formatDate(new Date(), tz, "yyyy-MM-dd'T'HH:mm:ss"),
     metrics: metricsMeta,
     totals: {
@@ -298,7 +324,8 @@ function collectDashboardData() {
       refuseRate: refuseRate,
       transferRate: transferRate,
       yieldPerGroup: yieldPerGroup,
-      avgDay1PerGroup: avgDay1PerGroup
+      avgDay1PerGroup: avgDay1PerGroup,
+      lineReview: lineReviewPack.totals
     },
     funnel: [
       { label: '1-й день', value: totalDay1 },
@@ -344,7 +371,9 @@ function buildDashboard() {
     ['Отказали мы (закончившиеся группы)', t.refused],
     ['Перенесли в другую группу (закончившиеся группы)', t.transferred],
     ['Итоговый выход на линию (закончившиеся группы)', t.finalCount],
-    ['Общая конверсия 1→5 день', t.conv1to5 + '%']
+    ['Общая конверсия 1→5 день', t.conv1to5 + '%'],
+    ['Оценка после линии (журнал ОС), средняя 1–5', t.lineReview && t.lineReview.avgScore != null ? t.lineReview.avgScore : '—'],
+    ['Оценок в журнале ОС (с числом 1–5)', t.lineReview && t.lineReview.scored != null ? t.lineReview.scored : '—']
   ];
   dash.getRange(4, 1, 1, 2).setValues([['Показатель', 'Значение']]).setFontWeight('bold').setBackground('#d9d9d9');
   dash.getRange(5, 1, summaryRows.length, 2).setValues(summaryRows);
@@ -352,7 +381,7 @@ function buildDashboard() {
   var tableStartRow = 4 + summaryRows.length + 3;
   dash.getRange(tableStartRow, 1).setValue('ПО ТРЕНЕРАМ').setFontWeight('bold').setFontSize(13);
 
-  var trainerHeaders = ['Место', 'Тренер', 'TQI v2', 'Групп', 'Day1→Итог', 'Выход/гр', 'Вклад %', 'Распалось', 'Ушли %', 'Конв. 1→5', 'Конв. 2→5', 'Конв. 3→5'];
+  var trainerHeaders = ['Место', 'Тренер', 'TQI v2', 'Групп', 'Day1→Итог', 'Выход/гр', 'Вклад %', 'Распалось', 'Ушли %', 'Конв. 1→5', 'Конв. 2→5', 'Конв. 3→5', 'ОС 1–5'];
   var headerRow = tableStartRow + 1;
   dash.getRange(headerRow, 1, 1, trainerHeaders.length).setValues([trainerHeaders]).setFontWeight('bold').setBackground('#d9d9d9');
 
@@ -377,7 +406,8 @@ function buildDashboard() {
       tr.leftRate != null ? tr.leftRate + '%' : '',
       tr.conv1to5Weighted !== null && tr.conv1to5Weighted !== undefined ? tr.conv1to5Weighted + '%' : '',
       tr.conv2 !== null && tr.conv2 !== undefined ? tr.conv2 + '%' : '',
-      tr.conv3 !== null && tr.conv3 !== undefined ? tr.conv3 + '%' : ''
+      tr.conv3 !== null && tr.conv3 !== undefined ? tr.conv3 + '%' : '',
+      tr.lineReview && tr.lineReview.avgScore != null ? tr.lineReview.avgScore : ''
     ];
   });
   if (trainerRows.length > 0) {
@@ -476,6 +506,180 @@ function isLineDateReached(lineDate, todayKey, tz) {
   return formatSheetDate(lineDate, tz) <= todayKey;
 }
 
+function stripTrainerRolePrefix(name) {
+  return String(name || '').replace(/^тренер[:.\s]+/i, '').trim();
+}
+
+function trainerMatchKey(value) {
+  var name = stripTrainerRolePrefix(normalizeName(value));
+  if (!name || name === 'Без имени') return '';
+  var parts = name.split(' ');
+  if (parts.length >= 2) return (parts[0] + '|' + parts[1]).toLowerCase();
+  return name.toLowerCase();
+}
+
+function parseScore15(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  if (typeof value === 'number') {
+    if (value >= 1 && value <= 5) return round1(value);
+    return null;
+  }
+  var s = String(value).replace(/\u200b/g, '').trim();
+  if (!s) return null;
+  s = s.replace(',', '.');
+  s = s.replace(/(\d)\.\s*[.,]?\s*(\d)/, '$1.$2');
+  if (/[–—-]/.test(s)) return null;
+  if (!/^[1-5](\.\d+)?$/.test(s)) return null;
+  var n = parseFloat(s);
+  if (isNaN(n) || n < 1 || n > 5) return null;
+  return round1(n);
+}
+
+function parseYesNo(value) {
+  if (value === true) return true;
+  if (value === false) return false;
+  if (value === '' || value === null || value === undefined) return null;
+  var s = String(value).replace(/\u200b/g, '').trim().toLowerCase();
+  if (!s || s === '?' || s === '-' || s === '—' || s === '–') return null;
+  if (s === 'да' || s === 'yes' || s === 'y' || s === '+') return true;
+  if (s === 'нет' || s === 'no' || s === 'n') return false;
+  return null;
+}
+
+function emptyLineReviewAgg() {
+  return {
+    reviewed: 0,
+    scored: 0,
+    scoreSum: 0,
+    avgScore: null,
+    scriptYes: 0,
+    scriptFilled: 0,
+    scriptYesRate: null,
+    objectionsYes: 0,
+    objectionsFilled: 0,
+    objectionsYesRate: null,
+    crmYes: 0,
+    crmFilled: 0,
+    crmYesRate: null
+  };
+}
+
+function addLineReviewSample(agg, score, script, objections, crm) {
+  agg.reviewed += 1;
+  if (score !== null) {
+    agg.scored += 1;
+    agg.scoreSum += score;
+  }
+  if (script !== null) {
+    agg.scriptFilled += 1;
+    if (script) agg.scriptYes += 1;
+  }
+  if (objections !== null) {
+    agg.objectionsFilled += 1;
+    if (objections) agg.objectionsYes += 1;
+  }
+  if (crm !== null) {
+    agg.crmFilled += 1;
+    if (crm) agg.crmYes += 1;
+  }
+}
+
+function finalizeLineReviewAgg(agg) {
+  var out = {
+    reviewed: agg.reviewed,
+    scored: agg.scored,
+    avgScore: agg.scored > 0 ? round1(agg.scoreSum / agg.scored) : null,
+    scriptYesRate: agg.scriptFilled > 0 ? round1(agg.scriptYes / agg.scriptFilled * 100) : null,
+    scriptFilled: agg.scriptFilled,
+    objectionsYesRate: agg.objectionsFilled > 0 ? round1(agg.objectionsYes / agg.objectionsFilled * 100) : null,
+    objectionsFilled: agg.objectionsFilled,
+    crmYesRate: agg.crmFilled > 0 ? round1(agg.crmYes / agg.crmFilled * 100) : null,
+    crmFilled: agg.crmFilled
+  };
+  return out;
+}
+
+function isLineReviewDataRow(row) {
+  var employee = String(row[LINE_COL.employee] || '').replace(/\u200b/g, '').trim();
+  var trainerRaw = String(row[LINE_COL.trainer] || '').replace(/\u200b/g, '').trim();
+  if (!employee && !trainerRaw) return false;
+  var empLow = employee.toLowerCase();
+  if (empLow === 'сотрудник' || empLow.indexOf('дата старта') === 0 || empLow.indexOf('дата выхода') === 0) return false;
+  if (empLow === 'да/нет') return false;
+  var trLow = trainerRaw.toLowerCase();
+  if (trLow === 'тренер:' || trLow === 'тренер' || trLow === 'да/нет') return false;
+  return true;
+}
+
+function collectLineReviewPack(canonicalNames) {
+  var emptyTotals = Object.assign(finalizeLineReviewAgg(emptyLineReviewAgg()), {
+    unmatched: 0,
+    skipped: 0
+  });
+  var fail = function(message) {
+    return { ok: false, error: message, byTrainer: {}, totals: emptyTotals };
+  };
+  try {
+    if (!LINE_REVIEW_SPREADSHEET_ID) return fail('не задан LINE_REVIEW_SPREADSHEET_ID');
+    var book = SpreadsheetApp.openById(LINE_REVIEW_SPREADSHEET_ID);
+    var sheet = book.getSheetByName(LINE_REVIEW_SHEET_NAME);
+    if (!sheet) return fail('не найден лист «' + LINE_REVIEW_SHEET_NAME + '»');
+
+    var lastRow = Math.max(sheet.getLastRow(), 1);
+    var endRow = Math.min(lastRow, LINE_REVIEW_DATA_END_ROW);
+    var values = sheet.getRange('A1:' + LINE_REVIEW_LAST_COLUMN + endRow).getValues();
+
+    var keyToName = {};
+    (canonicalNames || []).forEach(function(name) {
+      var key = trainerMatchKey(name);
+      if (key) keyToName[key] = name;
+    });
+
+    var byKey = {};
+    var company = emptyLineReviewAgg();
+    var unmatched = 0;
+    var skipped = 0;
+
+    values.forEach(function(row) {
+      if (!isLineReviewDataRow(row)) return;
+      var trainerRaw = String(row[LINE_COL.trainer] || '').replace(/\u200b/g, '').trim();
+      var key = trainerMatchKey(trainerRaw);
+      if (!key) {
+        skipped += 1;
+        return;
+      }
+      var canonical = keyToName[key];
+      if (!canonical) {
+        unmatched += 1;
+        return;
+      }
+      if (!byKey[canonical]) byKey[canonical] = emptyLineReviewAgg();
+      var score = parseScore15(row[LINE_COL.score]);
+      var script = parseYesNo(row[LINE_COL.script]);
+      var objections = parseYesNo(row[LINE_COL.objections]);
+      var crm = parseYesNo(row[LINE_COL.crm]);
+      addLineReviewSample(byKey[canonical], score, script, objections, crm);
+      addLineReviewSample(company, score, script, objections, crm);
+    });
+
+    var byTrainer = {};
+    Object.keys(byKey).forEach(function(name) {
+      byTrainer[name] = finalizeLineReviewAgg(byKey[name]);
+    });
+    var totals = Object.assign(finalizeLineReviewAgg(company), {
+      unmatched: unmatched,
+      skipped: skipped
+    });
+    return { ok: true, error: null, byTrainer: byTrainer, totals: totals };
+  } catch (err) {
+    var msg = err && err.message ? String(err.message) : String(err);
+    if (/permission|authorize|access|недостаточно|denied/i.test(msg)) {
+      msg = 'нет доступа к журналу ОС — выдай «Читатель» аккаунту деплоера';
+    }
+    return fail(msg);
+  }
+}
+
 function outcomeGroupCount(row) {
   if (row && row.groupsCompleted != null) return Number(row.groupsCompleted) || 0;
   return Number(row && row.groups) || 0;
@@ -521,7 +725,14 @@ function buildMetricsMeta() {
     reliabilityRefDay1: 200,
     badgeLow: 20,
     badgeHigh: 30,
-    planConv1to5: 30
+    planConv1to5: 30,
+    lineReview: {
+      periodIndependent: true,
+      scoreMin: 1,
+      scoreMax: 5,
+      badgeLow: 3.5,
+      badgeHigh: 4.5
+    }
   };
 }
 

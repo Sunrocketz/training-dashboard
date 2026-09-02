@@ -317,7 +317,7 @@
 
 <script>
 const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNjs7MKzbt9Fw/exec';
-const LOCAL_CACHE_KEY = 'trainingDashboard:lastPayload:v2';
+const LOCAL_CACHE_KEY = 'trainingDashboard:lastPayload:v3';
 
 let dashboardData = null;
 let viewData = null;
@@ -406,6 +406,45 @@ function pctBadgeClass(value){
   if(value>=m.badgeHigh) return 'success';
   if(value>=m.badgeLow) return 'warning';
   return 'danger';
+}
+
+function lineReviewMeta(){
+  const m = (metrics() && metrics().lineReview) || {};
+  return {
+    badgeLow: m.badgeLow!=null ? m.badgeLow : 3.5,
+    badgeHigh: m.badgeHigh!=null ? m.badgeHigh : 4.5,
+    ok: m.ok,
+    error: m.error || null
+  };
+}
+
+function score15BadgeClass(value){
+  const m = lineReviewMeta();
+  if(value===null||value===undefined) return '';
+  if(value>=m.badgeHigh) return 'success';
+  if(value>=m.badgeLow) return 'warning';
+  return 'danger';
+}
+
+function lineReviewOf(t){
+  return t && t.lineReview ? t.lineReview : null;
+}
+
+function attachLineReviewFromRaw(trainers, raw){
+  const map = {};
+  (raw && raw.byTrainer || []).forEach(t=>{
+    if(t && t.name && t.lineReview) map[t.name] = t.lineReview;
+  });
+  return (trainers||[]).map(t=>Object.assign({}, t, {
+    lineReview: t.lineReview || map[t.name] || null
+  }));
+}
+
+function hasLineReviewPayload(data){
+  const src = data || dashboardData;
+  if(!src) return false;
+  if(src.schemaVersion>=6) return true;
+  return !!(src.totals && src.totals.lineReview);
 }
 
 function clamp100(n){ return Math.max(0, Math.min(100, n)); }
@@ -601,6 +640,7 @@ function aggregateFromGroups(groups, raw){
     conv2: t.conv2Count>0 ? round1(t.conv2Sum/t.conv2Count) : null,
     conv3: t.conv3Count>0 ? round1(t.conv3Sum/t.conv3Count) : null
   }));
+  const byTrainerWithReview = attachLineReviewFromRaw(byTrainerRaw, raw);
 
   const monthOrder = [];
   const byMonthMap = {};
@@ -645,7 +685,8 @@ function aggregateFromGroups(groups, raw){
     refuseRate: day1>0 ? round1(refused/day1*100) : 0,
     transferRate: day1>0 ? round1(transferred/day1*100) : 0,
     yieldPerGroup: completed.length>0 ? round1(finalCount/completed.length) : 0,
-    avgDay1PerGroup: completed.length>0 ? round1(day1/completed.length) : 0
+    avgDay1PerGroup: completed.length>0 ? round1(day1/completed.length) : 0,
+    lineReview: raw && raw.totals && raw.totals.lineReview ? raw.totals.lineReview : null
   };
 
   return {
@@ -660,7 +701,7 @@ function aggregateFromGroups(groups, raw){
       {label:'3-й день', value: day3Start},
       {label:'Выход на линию', value: finalCount}
     ],
-    byTrainer: rankedTrainers(byTrainerRaw, totals),
+    byTrainer: rankedTrainers(byTrainerWithReview, totals),
     byMonth,
     groups,
     allByMonth: raw.byMonth || []
@@ -832,13 +873,15 @@ function exportActiveTabCsv(){
   const tab = document.querySelector('.tab-btn.active')?.dataset.tab || 'overview';
   const stamp = new Date().toISOString().slice(0,10);
   if(tab === 'trainers'){
-    const rows = [['Место','Тренер','TQI v2','Групп','Закончились','В обучении','Day1','Итог','Выход/гр','Вклад %','Распалось','Ушли %','Конв 1→5','Конв 2→5','Конв 3→5','Качество','Надёжность','ВкладЧасть','YieldЧасть','Стабильность']];
+    const rows = [['Место','Тренер','TQI v2','Групп','Закончились','В обучении','Day1','Итог','Выход/гр','Вклад %','Распалось','Ушли %','Конв 1→5','Конв 2→5','Конв 3→5','ОС оценка','ОС оценок','Скрипт %','Возражения %','CRM %','Качество','Надёжность','ВкладЧасть','YieldЧасть','Стабильность']];
     rankedTrainers(viewData.byTrainer, viewData.totals).forEach(t=>{
       const p = t.scoreParts || {};
+      const lr = lineReviewOf(t) || {};
       rows.push([
         t.rank, t.name, t.score, t.groups, outcomeGroupCount(t), groupsInProgressCount(t),
         t.day1, t.finalCount, t.yieldPerGroup, t.contributionShare,
         t.fellApart||0, t.leftRate, t.conv1to5Weighted, t.conv2, t.conv3,
+        lr.avgScore, lr.scored, lr.scriptYesRate, lr.objectionsYesRate, lr.crmYesRate,
         p.quality, p.reliability, p.contribution, p.yield, p.stability
       ]);
     });
@@ -871,6 +914,8 @@ function exportActiveTabCsv(){
     ['Ушли сами', t.leftSelf],
     ['Отказали', t.refused],
     ['Перенесли', t.transferred],
+    ['ОС средняя 1–5', t.lineReview && t.lineReview.avgScore],
+    ['ОС оценок', t.lineReview && t.lineReview.scored],
     [],
     ['Месяц','Групп','Закончились','В обучении','Распалось','Ушли сами','Отказали','Перенесли','Конв 1→5','Конв распавш']
   ];
@@ -929,9 +974,9 @@ function renderAll(){
   el('dataUpdatedLabel').textContent = formatDataUpdated(dashboardData.updatedAt);
   const hint = el('periodHint');
   if(periodMonth){
-    hint.textContent = `Сейчас выбран месяц «${periodMonth}»: старты — все группы месяца; выход и конверсии — только законченные.`;
+    hint.textContent = `Сейчас выбран месяц «${periodMonth}»: старты — все группы месяца; выход и конверсии — только законченные. Оценка после линии — за весь журнал ОС, месяц её не режет.`;
   } else {
-    hint.textContent = 'Сейчас: весь период. «Всего групп» включая в обучении; выход и конверсии — законченные. Стрелки KPI = последний месяц к предыдущему.';
+    hint.textContent = 'Сейчас: весь период. «Всего групп» включая в обучении; выход и конверсии — законченные. Оценка после линии — журнал ОС. Стрелки KPI = последний месяц к предыдущему.';
   }
   renderOverview(viewData);
   renderTrainersTab(viewData);
@@ -1063,6 +1108,54 @@ function initTabsOnce(){
   });
 }
 
+function renderLineReviewSection(data){
+  if(!hasLineReviewPayload(data) && !hasLineReviewPayload(dashboardData)) return '';
+  const lr = (data.totals && data.totals.lineReview) || (dashboardData && dashboardData.totals && dashboardData.totals.lineReview) || null;
+  const meta = lineReviewMeta();
+  const trainers = rankedTrainers(data.byTrainer, data.totals)
+    .filter(t=>lineReviewOf(t) && lineReviewOf(t).scored>0)
+    .sort((a,b)=>(b.lineReview.avgScore||0)-(a.lineReview.avgScore||0));
+  const avg = lr && lr.avgScore!=null ? lr.avgScore : null;
+  const err = meta.error || (lr ? null : (meta.ok===false ? 'журнал ОС недоступен' : null));
+  const unmatched = lr && lr.unmatched ? lr.unmatched : 0;
+  const rows = trainers.map(t=>{
+    const r = t.lineReview;
+    return `<tr data-trainer="${t.name}">
+      <td>${t.name}</td>
+      <td><span class="badge ${score15BadgeClass(r.avgScore)}">${r.avgScore!=null?r.avgScore:'—'}</span></td>
+      <td>${r.scored||0}</td>
+      <td>${r.scriptYesRate!=null?r.scriptYesRate+'%':'—'}</td>
+      <td>${r.objectionsYesRate!=null?r.objectionsYesRate+'%':'—'}</td>
+      <td>${r.crmYesRate!=null?r.crmYesRate+'%':'—'}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="font-family:var(--font-body);color:var(--text-muted);">Пока нет числовых оценок 1–5, совпавших с тренерами обучения</td></tr>';
+
+  return `<div class="section">
+    <div class="section-head">
+      <h2>Оценка после линии</h2>
+      <div class="desc">Журнал супервайзеров · подготовка 1–5 · не входит в TQI · ${data.periodFiltered?'не зависит от фильтра месяца':'весь журнал'}</div>
+    </div>
+    <div class="mini-kpi-grid cols-3">
+      <div class="mini-kpi"><div class="label">Средняя подготовка</div><div class="value">${avg!=null?avg:'—'}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${lr && lr.scored!=null?lr.scored+' оценок':(err||'нет данных')}</div>
+      </div>
+      <div class="mini-kpi"><div class="label">Скрипт / возражения</div><div class="value">${lr && lr.scriptYesRate!=null?lr.scriptYesRate+'%':'—'} / ${lr && lr.objectionsYesRate!=null?lr.objectionsYesRate+'%':'—'}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">доля «да» среди заполненных</div>
+      </div>
+      <div class="mini-kpi"><div class="label">CRM</div><div class="value">${lr && lr.crmYesRate!=null?lr.crmYesRate+'%':'—'}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${unmatched?unmatched+' строк без склейки с обучением':'склейка по фамилии и имени'}</div>
+      </div>
+    </div>
+    <div style="overflow-x:auto;margin-top:12px;">
+      <table class="dropout-table" id="lineReviewTable">
+        <thead><tr><th>Тренер</th><th>Оценка 1–5</th><th>Оценок</th><th>Скрипт</th><th>Возражения</th><th>CRM</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="footnote">Берём только число 1–5 из колонки подготовки. Прогноз, комментарии и ФИО учеников в API не попадают.${err?` ${err}.`:''}</div>
+  </div>`;
+}
+
 function renderOverview(data){
   const t = data.totals;
   const m = metrics();
@@ -1121,6 +1214,7 @@ function renderOverview(data){
       <div class="kpi-card warning"><div class="scope">${scope}</div><div class="label">Распалось групп</div><div class="value">${t.fellApart!=null?t.fellApart:0}</div><div class="sub">${fellShare}% · конв. ${fellConv}</div>${fellDelta}</div>
       <div class="kpi-card"><div class="scope">${scope}</div><div class="label">Отказали / перенесли</div><div class="value">${t.refused} / ${t.transferred}</div><div class="sub">${insights.refuseRate}% / ${insights.transferRate}% от day1</div>${refusedDelta}</div>
     </div>
+    ${renderLineReviewSection(data)}
     <div class="two-col">
       <div class="section">
         <div class="section-head"><h2>Сильные стороны</h2><div class="desc">Что уже работает в текущей области</div></div>
@@ -1227,6 +1321,9 @@ function renderOverview(data){
   document.querySelectorAll('#rankBody tr[data-trainer]').forEach(tr=>{
     tr.addEventListener('click', ()=>openTrainerDetail(tr.dataset.trainer));
   });
+  document.querySelectorAll('#lineReviewTable tr[data-trainer]').forEach(tr=>{
+    tr.addEventListener('click', ()=>openTrainerDetail(tr.dataset.trainer));
+  });
 }
 
 function trainerConv(t){
@@ -1328,7 +1425,7 @@ function renderTrainersTab(data){
       <div>
         <div class="eyebrow">Вкладка тренеров</div>
         <div class="headline">${data.periodFiltered ? `Тренеры за месяц «${periodMonth}»` : 'Тренеры за весь период'}</div>
-        <div class="support">Рейтинг TQI v2: качество воронки + вклад (day1→итог) + надёжность выборки + выход/группу + стабильность. TQI считается по законченным группам. Полный список — на вкладке «Обзор».</div>
+        <div class="support">Рейтинг TQI v2: качество воронки + вклад (day1→итог) + надёжность выборки + выход/группу + стабильность. TQI считается по законченным группам. Колонка «ОС 1–5» — подготовка после линии, не в TQI. Полный список — на вкладке «Обзор».</div>
       </div>
       <div class="side-note">Клик по строке — карточка. Сортировка по заголовку.</div>
     </div>
@@ -1348,8 +1445,14 @@ function renderTrainerTable(data){
   const search = (el('trainerSearch') && el('trainerSearch').value.toLowerCase()) || '';
   if(search) trainers = trainers.filter(t=>t.name.toLowerCase().includes(search));
   trainers.sort((a,b)=>{
-    let av=a[trainerSortState.key], bv=b[trainerSortState.key];
-    if(trainerSortState.key==='rank'){
+    const key = trainerSortState.key;
+    let av, bv;
+    if(key==='lineScore'){
+      av = a.lineReview && a.lineReview.avgScore; bv = b.lineReview && b.lineReview.avgScore;
+    } else {
+      av=a[key]; bv=b[key];
+    }
+    if(key==='rank'){
       av = av!=null ? av : 9999; bv = bv!=null ? bv : 9999;
     } else {
       if(av===null||av===undefined) av=-1; if(bv===null||bv===undefined) bv=-1;
@@ -1358,7 +1461,7 @@ function renderTrainerTable(data){
     return trainerSortState.dir==='asc'? av-bv : bv-av;
   });
   const cols = [
-    ['rank','#'],['name','Тренер'],['score','TQI v2'],['groups','Групп'],['day1','Day1'],['finalCount','Итог'],
+    ['rank','#'],['name','Тренер'],['score','TQI v2'],['lineScore','ОС 1–5'],['groups','Групп'],['day1','Day1'],['finalCount','Итог'],
     ['yieldPerGroup','Выход/гр'],['contributionShare','Вклад %'],['fellApart','Распалось'],
     ['leftRate','Ушли %'],['conv1to5Weighted','Конв. 1→5'],['conv2','Конв. 2→5'],['conv3','Конв. 3→5']
   ];
@@ -1371,6 +1474,7 @@ function renderTrainerTable(data){
       <td><span class="badge ${t.rank!=null && t.rank<=3?'success':(t.rankEligible?'neutral':'')}">${t.rank!=null?t.rank:'—'}</span></td>
       <td>${t.name}</td>
       <td><span class="badge ${pctBadgeClass(t.score)}">${t.score!=null?t.score:'—'}</span></td>
+      <td><span class="badge ${score15BadgeClass(t.lineReview && t.lineReview.avgScore)}">${t.lineReview && t.lineReview.avgScore!=null?t.lineReview.avgScore:'—'}</span></td>
       <td>${t.groups}${groupsInProgressCount(t)?` <span style="color:var(--text-muted);font-size:11px;">/${outcomeGroupCount(t)}</span>`:''}</td><td>${t.day1}</td><td>${t.finalCount}</td>
       <td>${t.yieldPerGroup!=null?t.yieldPerGroup:'—'}</td>
       <td>${t.contributionShare!=null?t.contributionShare+'%':'—'}</td>
@@ -1386,6 +1490,28 @@ function renderTrainerTable(data){
     renderTrainerTable(viewData);
   }));
   document.querySelectorAll('#trainerBody tr').forEach(tr=>tr.addEventListener('click', ()=>openTrainerDetail(tr.dataset.trainer)));
+}
+
+function renderTrainerLineReviewBlock(trainer){
+  const lr = lineReviewOf(trainer);
+  if(!hasLineReviewPayload(viewData) && !hasLineReviewPayload(dashboardData)) return '';
+  if(!lr || (lr.scored==null && lr.reviewed==null)){
+    return `<div class="section" style="margin:0 0 18px;padding:14px 16px;">
+      <div class="section-head" style="margin-bottom:0;"><h2>После линии</h2><div class="desc">Нет оценок в журнале ОС, склеенных с этим тренером</div></div>
+    </div>`;
+  }
+  return `<div class="section" style="margin:0 0 18px;padding:14px 16px;">
+    <div class="section-head"><h2>После линии</h2><div class="desc">Подготовка 1–5 из журнала ОС · не входит в TQI</div></div>
+    <div class="mini-kpi-grid cols-3">
+      <div class="mini-kpi"><div class="label">Средняя подготовка</div><div class="value">${lr.avgScore!=null?lr.avgScore:'—'}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${lr.scored||0} оценок</div>
+      </div>
+      <div class="mini-kpi"><div class="label">Скрипт / возражения</div><div class="value">${lr.scriptYesRate!=null?lr.scriptYesRate+'%':'—'} / ${lr.objectionsYesRate!=null?lr.objectionsYesRate+'%':'—'}</div></div>
+      <div class="mini-kpi"><div class="label">CRM</div><div class="value">${lr.crmYesRate!=null?lr.crmYesRate+'%':'—'}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">доля «да» среди заполненных</div>
+      </div>
+    </div>
+  </div>`;
 }
 
 function openTrainerDetail(name, opts={}){
@@ -1449,7 +1575,8 @@ function openTrainerDetail(name, opts={}){
       <div class="mini-kpi"><div class="label">Конв. 2→5</div><div class="value">${trainer.conv2!=null?trainer.conv2+'%':'—'}</div></div>
       <div class="mini-kpi"><div class="label">Конв. 3→5</div><div class="value">${trainer.conv3!=null?trainer.conv3+'%':'—'}</div></div>
     </div>
-    <div class="footnote" style="margin:-2px 0 14px;">Область: ${periodMonth?`месяц «${periodMonth}»`:'весь период'}. Воронка и конверсии — законченные группы. «В обучении» видны в списке, но не в цифрах результата.</div>
+    ${renderTrainerLineReviewBlock(trainer)}
+    <div class="footnote" style="margin:-2px 0 14px;">Область: ${periodMonth?`месяц «${periodMonth}»`:'весь период'}. Воронка и конверсии — законченные группы. Оценка после линии — весь журнал ОС. «В обучении» видны в списке, но не в цифрах результата.</div>
     <div class="section-head"><h2>Воронка тренера</h2></div>
     <div class="funnel" id="trainerFunnel" style="margin-bottom:22px;"></div>
     <div class="section-head"><h2>Группы тренера</h2></div>
