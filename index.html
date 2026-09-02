@@ -451,6 +451,10 @@ function trainerNameLabel(t){
   if(!isDepartedTrainer(t)) return name;
   return `${name} <span style="color:var(--text-muted);font-size:11px;">(Уволен)</span>`;
 }
+function trainerNameText(t){
+  const name = typeof t==='string' ? t : (t && t.name) || '';
+  return isDepartedTrainer(t) ? name + ' (Уволен)' : name;
+}
 
 function lineReviewOf(t){
   return t && t.lineReview ? t.lineReview : null;
@@ -629,9 +633,9 @@ function companyInsights(data){
   else weaknesses.push(`Доля распавшихся групп ${t.fellApartShare||0}% — зона риска`);
   if(abovePlan.length) strengths.push(`${abovePlan.length} тренер(ов) на/выше плана 1→5`);
   if(belowPlan.length) weaknesses.push(`${belowPlan.length} тренер(ов) ниже плана 1→5`);
-  if(highFell.length) weaknesses.push(`Высокий распад у: ${highFell.slice(0,3).map(x=>x.name).join(', ')}`);
-  if(topContrib) strengths.push(`Главный вклад в выход: ${topContrib.name} (${topContrib.day1}→${topContrib.finalCount})`);
-  if(topYield) strengths.push(`Лучший выход/группу: ${topYield.name} (${topYield.yieldPerGroup})`);
+  if(highFell.length) weaknesses.push(`Высокий распад у: ${highFell.slice(0,3).map(x=>trainerNameText(x)).join(', ')}`);
+  if(topContrib) strengths.push(`Главный вклад в выход: ${trainerNameText(topContrib)} (${topContrib.day1}→${topContrib.finalCount})`);
+  if(topYield) strengths.push(`Лучший выход/группу: ${trainerNameText(topYield)} (${topYield.yieldPerGroup})`);
   if(highLeft.length>=3) weaknesses.push(`Слабое удержание у ${highLeft.length} тренеров (ушли ≥${Math.max(leftRate,60)}%)`);
   return { leftRate, refuseRate, transferRate, yieldPerGroup, trainers, eligible, belowPlan, abovePlan, strengths, weaknesses, topContrib, topYield };
 }
@@ -1329,7 +1333,7 @@ function renderOverview(data){
           <tbody>
             ${fellByTrainer.map(tr=>`
               <tr>
-                <td>${tr.name}</td>
+                <td>${trainerNameLabel(tr)}</td>
                 <td>${tr.fellApart}</td>
                 <td>${tr.groups}</td>
                 <td><span class="badge ${pctBadgeClass(tr.fellApartConv1to5)}">${tr.fellApartConv1to5!=null?tr.fellApartConv1to5+'%':'—'}</span></td>
