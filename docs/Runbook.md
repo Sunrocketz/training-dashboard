@@ -8,7 +8,7 @@
 | Branch деплоя UI | `main` |
 | Script ID | `1jNtOi1KDqH0HltJPgBkBbZJKCvvY1191vshAxe3vZjTjquO9QG2bWphZ` |
 | Deployment @HEAD (dev/head) | `AKfycbzjxGv5RjnrwtfceJyD4AfW0GQSHd72PgUbeAcC3KxC` |
-| Deployment веб-UI (/exec, schema v6) | `AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNjs7MKzbt9Fw` |
+| Deployment веб-UI (/exec, schema v7) | `AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNjs7MKzbt9Fw` |
 | Локальный GAS | `apps-script/` |
 
 UI по умолчанию бьёт в **deployment v2** (см. `DEFAULT_APPS_SCRIPT_URL` в `index.html`).
@@ -122,11 +122,11 @@ clasp login
 
 ## Смоук-чек после релиза
 
-- [ ] `GET /exec` → `schemaVersion: 6`, есть `totals.lineReview`, `metrics.lineReview.ok` true при доступе к журналу
+- [ ] `GET /exec` → `schemaVersion: 7`, `metrics.rankScore: tqi_v3`, есть `totals.lineReview`
 - [ ] `totals.groups` ≥ `groupsCompleted`; `groupsInProgress` = разница; `finalCount` только законченные
 - [ ] KPI: «Всего групп» включает в обучении; «Вышло на линию» и конверсия — без действующих
 - [ ] У тренера: `groupsCompleted`, `yieldPerGroup` = final/законченные; TQI не считает идущие группы
-- [ ] UI: полный рейтинг на обзоре, блок «Оценка после линии», бейдж «в обучении» в списке групп
+- [ ] UI: рейтинг TQI v3, в карточке части «Балл 1–5» и «Навыки да/нет»; в JSON есть `scoreParts.skills`
 - [ ] Карточка тренера: блок «После линии» (средняя 1–5, скрипт/возражения/CRM)
 
 - [ ] Фильтр периода переключает данные; легенда порогов видна

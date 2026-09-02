@@ -97,7 +97,7 @@
 | `byMonth` | group-by `month`; старты vs outcome как totals |
 | `groups` | map valid → GroupRow (`completed`, `lineDate`, `fellApart`) |
 | `totals` / `funnel` | старт = все valid; суммы/rates/yield — законченные; `groupsCompleted` / `groupsInProgress` |
-| `metrics` | TQI v2 веса, пороги бейджей, `fellApartInValid`, мета `lineReview` |
+| `metrics` | TQI v3 веса (`line` + `skills`), пороги бейджей, `fellApartInValid`, мета `lineReview` |
 
 ## Лист-результат
 

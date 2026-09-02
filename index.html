@@ -317,7 +317,7 @@
 
 <script>
 const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNjs7MKzbt9Fw/exec';
-const LOCAL_CACHE_KEY = 'trainingDashboard:lastPayload:v3';
+const LOCAL_CACHE_KEY = 'trainingDashboard:lastPayload:v4';
 
 let dashboardData = null;
 let viewData = null;
@@ -333,10 +333,10 @@ let charts = {};
 
 const DEFAULT_METRICS = {
   badgeLow: 20, badgeHigh: 30, planConv1to5: 30,
-  rankScore: 'tqi_v2',
-  rankMinGroups: 2, rankMinDay1: 10,
+  rankScore: 'tqi_v3',
+  rankMinGroups: 2, rankMinDay1: 10, rankMinLineScores: 2,
   rankWeights: {
-    quality: 0.50, reliability: 0.15, contribution: 0.20, yield: 0.10, stability: 0.05
+    quality: 0.40, line: 0.05, skills: 0.05, reliability: 0.15, contribution: 0.20, yield: 0.10, stability: 0.05
   },
   qualityMix: { conv1to5: 0.60, conv2: 0.25, conv3: 0.15 },
   contribFullAtShare: 0.25,
@@ -454,16 +454,26 @@ function scoreContextFromTotals(totals){
     totalFinal: totals && totals.finalCount != null ? totals.finalCount : 0,
     totalGroups: totals && totals.groupsCompleted != null ? totals.groupsCompleted
       : (totals && totals.groups != null ? totals.groups : 0),
-    totalDay1: totals && totals.day1 != null ? totals.day1 : 0
+    totalDay1: totals && totals.day1 != null ? totals.day1 : 0,
+    lineAvgScore: totals && totals.lineReview && totals.lineReview.avgScore != null
+      ? totals.lineReview.avgScore : null,
+    skillsAvgRate: (function(){
+      const lr = totals && totals.lineReview;
+      if(!lr) return null;
+      const xs = [lr.scriptYesRate, lr.objectionsYesRate, lr.crmYesRate].filter(v=>v!=null);
+      if(!xs.length) return null;
+      return round1(xs.reduce((s,v)=>s+Number(v),0)/xs.length);
+    })()
   };
 }
 
-/** TQI v2 — гибрид качества и вклада (как в GAS / ADR-013). */
+/** TQI v3 — воронка + линия + вклад (как в GAS / ADR-016). */
 function computeTrainerScore(t, mtr, ctx){
   const c15 = t.conv1to5Weighted!=null ? t.conv1to5Weighted : t.conv1to5;
   if(c15==null) return null;
   const m = Object.assign({}, DEFAULT_METRICS, mtr || metrics());
-  const w = Object.assign({}, DEFAULT_METRICS.rankWeights, m.rankWeights || {});
+  const apiW = m.rankWeights || {};
+  const w = Object.assign({ line: 0, skills: 0 }, apiW.quality!=null ? apiW : DEFAULT_METRICS.rankWeights);
   const qm = Object.assign({}, DEFAULT_METRICS.qualityMix, m.qualityMix || {});
   const c2 = t.conv2!=null ? t.conv2 : c15;
   const c3 = t.conv3!=null ? t.conv3 : c15;
@@ -481,8 +491,25 @@ function computeTrainerScore(t, mtr, ctx){
   const yieldScore = avgYield>0 ? clamp100((yieldG/avgYield)*50) : 50;
   const fellShare = groupsOutcome>0 ? (t.fellApart||0)/groupsOutcome*100 : 0;
   const stability = clamp100(100-fellShare);
+  const minN = m.rankMinLineScores!=null ? m.rankMinLineScores : 2;
+  const lr = t.lineReview;
+  const personal = !!(lr && lr.avgScore!=null && (Number(lr.scored)||0) >= minN);
+  const lineRaw = personal ? lr.avgScore : (ctx && ctx.lineAvgScore!=null ? ctx.lineAvgScore : null);
+  const lineFill = personal ? 'personal' : (lineRaw!=null ? 'company' : 'neutral');
+  const line = lineRaw!=null ? clamp100(lineRaw/5*100) : 60;
+  const skillsXs = lr ? [lr.scriptYesRate, lr.objectionsYesRate, lr.crmYesRate].filter(v=>v!=null) : [];
+  const skillsFilled = lr ? (Number(lr.scriptFilled)||0)+(Number(lr.objectionsFilled)||0)+(Number(lr.crmFilled)||0) : 0;
+  const skillsPersonal = skillsXs.length>0 && skillsFilled>=minN;
+  const skillsRaw = skillsPersonal ? round1(skillsXs.reduce((s,v)=>s+Number(v),0)/skillsXs.length)
+    : (ctx && ctx.skillsAvgRate!=null ? ctx.skillsAvgRate : null);
+  const skillsFill = skillsPersonal ? 'personal' : (skillsRaw!=null ? 'company' : 'neutral');
+  const skills = skillsRaw!=null ? clamp100(skillsRaw) : 80;
+  const lineW = w.line!=null ? w.line : 0;
+  const skillsW = w.skills!=null ? w.skills : 0;
   const score =
     (w.quality||0)*quality +
+    lineW*line +
+    skillsW*skills +
     (w.reliability||0)*reliability +
     (w.contribution||0)*contribution +
     (w.yield||0)*yieldScore +
@@ -491,6 +518,10 @@ function computeTrainerScore(t, mtr, ctx){
     score: round1(score),
     parts: {
       quality: round1(quality),
+      line: round1(line),
+      lineFill,
+      skills: round1(skills),
+      skillsFill,
       reliability: round1(reliability),
       contribution: round1(contribution),
       yield: round1(yieldScore),
@@ -582,7 +613,7 @@ function companyInsights(data){
 function renderBadgeLegend(){
   const m = metrics();
   el('badgeLegend').innerHTML = `
-    <span>TQI v2 + конв.:</span>
+    <span>TQI v3 + конв.:</span>
     <span class="badge success">≥${m.badgeHigh} хорошо</span>
     <span class="badge warning">${m.badgeLow}–${m.badgeHigh-0.1} средне</span>
     <span class="badge danger"><${m.badgeLow} низко</span>
@@ -873,7 +904,7 @@ function exportActiveTabCsv(){
   const tab = document.querySelector('.tab-btn.active')?.dataset.tab || 'overview';
   const stamp = new Date().toISOString().slice(0,10);
   if(tab === 'trainers'){
-    const rows = [['Место','Тренер','TQI v2','Групп','Закончились','В обучении','Day1','Итог','Выход/гр','Вклад %','Распалось','Ушли %','Конв 1→5','Конв 2→5','Конв 3→5','ОС оценка','ОС оценок','Скрипт %','Возражения %','CRM %','Качество','Надёжность','ВкладЧасть','YieldЧасть','Стабильность']];
+    const rows = [['Место','Тренер','TQI v3','Групп','Закончились','В обучении','Day1','Итог','Выход/гр','Вклад %','Распалось','Ушли %','Конв 1→5','Конв 2→5','Конв 3→5','ОС оценка','ОС оценок','Скрипт %','Возражения %','CRM %','Качество','Линия','Навыки','Надёжность','ВкладЧасть','YieldЧасть','Стабильность']];
     rankedTrainers(viewData.byTrainer, viewData.totals).forEach(t=>{
       const p = t.scoreParts || {};
       const lr = lineReviewOf(t) || {};
@@ -882,7 +913,7 @@ function exportActiveTabCsv(){
         t.day1, t.finalCount, t.yieldPerGroup, t.contributionShare,
         t.fellApart||0, t.leftRate, t.conv1to5Weighted, t.conv2, t.conv3,
         lr.avgScore, lr.scored, lr.scriptYesRate, lr.objectionsYesRate, lr.crmYesRate,
-        p.quality, p.reliability, p.contribution, p.yield, p.stability
+        p.quality, p.line, p.skills, p.reliability, p.contribution, p.yield, p.stability
       ]);
     });
     downloadCsv(`trainers_${stamp}.csv`, rows);
@@ -974,9 +1005,9 @@ function renderAll(){
   el('dataUpdatedLabel').textContent = formatDataUpdated(dashboardData.updatedAt);
   const hint = el('periodHint');
   if(periodMonth){
-    hint.textContent = `Сейчас выбран месяц «${periodMonth}»: старты — все группы месяца; выход и конверсии — только законченные. Оценка после линии — за весь журнал ОС, месяц её не режет.`;
+    hint.textContent = `Сейчас выбран месяц «${periodMonth}»: старты — все группы месяца; выход и конверсии — только законченные. Линия в TQI — за весь журнал ОС, месяц её не режет.`;
   } else {
-    hint.textContent = 'Сейчас: весь период. «Всего групп» включая в обучении; выход и конверсии — законченные. Оценка после линии — журнал ОС. Стрелки KPI = последний месяц к предыдущему.';
+    hint.textContent = 'Сейчас: весь период. «Всего групп» включая в обучении; выход и конверсии — законченные. TQI v3: воронка 40% + балл 5% + навыки да/нет 5%. Стрелки KPI = последний месяц к предыдущему.';
   }
   renderOverview(viewData);
   renderTrainersTab(viewData);
@@ -1133,7 +1164,7 @@ function renderLineReviewSection(data){
   return `<div class="section">
     <div class="section-head">
       <h2>Оценка после линии</h2>
-      <div class="desc">Журнал супервайзеров · подготовка 1–5 · не входит в TQI · ${data.periodFiltered?'не зависит от фильтра месяца':'весь журнал'}</div>
+      <div class="desc">Журнал супервайзеров · балл 1–5 и доля «да» входят в TQI · ${data.periodFiltered?'не зависит от фильтра месяца':'весь журнал'}</div>
     </div>
     <div class="mini-kpi-grid cols-3">
       <div class="mini-kpi"><div class="label">Средняя подготовка</div><div class="value">${avg!=null?avg:'—'}</div>
@@ -1348,14 +1379,14 @@ function fullTrainerRankSection(data, insights){
       <td><span class="badge ${pctBadgeClass(trainerConv(t))}">${trainerConv(t)!=null?trainerConv(t)+'%':'—'}</span></td>
       <td>${t.leftRate!=null?t.leftRate+'%':'—'}</td>
       <td>${t.fellShare!=null?t.fellShare+'%':'—'}</td>
-      <td style="font-size:11px;color:var(--text-muted);">${parts.quality!=null?`К${parts.quality}`:''} ${parts.contribution!=null?`В${parts.contribution}`:''} ${parts.reliability!=null?`Н${parts.reliability}`:''}</td>
+      <td style="font-size:11px;color:var(--text-muted);">${parts.quality!=null?`К${parts.quality}`:''} ${parts.line!=null?`Л${parts.line}`:''} ${parts.skills!=null?`Н${parts.skills}`:''}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="11" style="font-family:var(--font-body);color:var(--text-muted);">Нет тренеров</td></tr>';
 
   return `<div class="section">
     <div class="section-head">
-      <h2>Полный рейтинг тренеров (TQI v2)</h2>
-      <div class="desc">Гибрид: качество воронки 50% · надёжность выборки 15% · вклад в выход компании 20% · выход/группу 10% · стабильность 5% · ${periodScopeLabel(data.periodFiltered)}</div>
+      <h2>Полный рейтинг тренеров (TQI v3)</h2>
+      <div class="desc">Гибрид: воронка 40% · балл 1–5 5% · скрипт/возр./CRM 5% · надёжность 15% · вклад 20% · выход/группу 10% · стабильность 5% · ${periodScopeLabel(data.periodFiltered)}</div>
     </div>
     <div style="overflow-x:auto;">
       <table class="dropout-table" id="rankTable">
@@ -1365,7 +1396,7 @@ function fullTrainerRankSection(data, insights){
         <tbody id="rankBody">${body}</tbody>
       </table>
     </div>
-    <div class="footnote">Место считается при ≥${m.rankMinGroups||2} законченных группах и ≥${m.rankMinDay1||10} чел. на 1-м дне. «Гр.» — все старты; TQI и выход — по законченным. «Части»: К=качество, В=вклад, Н=надёжность выборки. Клик по строке — карточка тренера.</div>
+    <div class="footnote">Место: ≥${m.rankMinGroups||2} законченных групп и ≥${m.rankMinDay1||10} чел. на 1-м дне. Линия и навыки в TQI: свои цифры при ≥${m.rankMinLineScores||2} ответах, иначе средняя компании (весь журнал ОС). «Части»: К=воронка, Л=балл 1–5, Н=доля «да» по скрипту/возражениям/CRM. Клик — карточка.</div>
   </div>`;
 }
 function monthSummaryMiniCard(data){
@@ -1425,7 +1456,7 @@ function renderTrainersTab(data){
       <div>
         <div class="eyebrow">Вкладка тренеров</div>
         <div class="headline">${data.periodFiltered ? `Тренеры за месяц «${periodMonth}»` : 'Тренеры за весь период'}</div>
-        <div class="support">Рейтинг TQI v2: качество воронки + вклад (day1→итог) + надёжность выборки + выход/группу + стабильность. TQI считается по законченным группам. Колонка «ОС 1–5» — подготовка после линии, не в TQI. Полный список — на вкладке «Обзор».</div>
+        <div class="support">Рейтинг TQI v3: воронка 40% + балл подготовки 5% + доля «да» (скрипт/возражения/CRM) 5% + вклад и стабильность. Журнал ОС — весь, даже если выбран месяц. Полный список — на вкладке «Обзор».</div>
       </div>
       <div class="side-note">Клик по строке — карточка. Сортировка по заголовку.</div>
     </div>
@@ -1461,7 +1492,7 @@ function renderTrainerTable(data){
     return trainerSortState.dir==='asc'? av-bv : bv-av;
   });
   const cols = [
-    ['rank','#'],['name','Тренер'],['score','TQI v2'],['lineScore','ОС 1–5'],['groups','Групп'],['day1','Day1'],['finalCount','Итог'],
+    ['rank','#'],['name','Тренер'],['score','TQI v3'],['lineScore','ОС 1–5'],['groups','Групп'],['day1','Day1'],['finalCount','Итог'],
     ['yieldPerGroup','Выход/гр'],['contributionShare','Вклад %'],['fellApart','Распалось'],
     ['leftRate','Ушли %'],['conv1to5Weighted','Конв. 1→5'],['conv2','Конв. 2→5'],['conv3','Конв. 3→5']
   ];
@@ -1501,7 +1532,7 @@ function renderTrainerLineReviewBlock(trainer){
     </div>`;
   }
   return `<div class="section" style="margin:0 0 18px;padding:14px 16px;">
-    <div class="section-head"><h2>После линии</h2><div class="desc">Подготовка 1–5 из журнала ОС · не входит в TQI</div></div>
+    <div class="section-head"><h2>После линии</h2><div class="desc">Балл 1–5 и доля «да» по скрипту / возражениям / CRM · в TQI v3</div></div>
     <div class="mini-kpi-grid cols-3">
       <div class="mini-kpi"><div class="label">Средняя подготовка</div><div class="value">${lr.avgScore!=null?lr.avgScore:'—'}</div>
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${lr.scored||0} оценок</div>
@@ -1552,7 +1583,7 @@ function openTrainerDetail(name, opts={}){
       </div>
     </div>
     <div class="mini-kpi-grid">
-      <div class="mini-kpi"><div class="label">Место / TQI v2</div><div class="value">${trainer.rank!=null?trainer.rank:'—'} · ${trainer.score!=null?trainer.score:'—'}</div>
+      <div class="mini-kpi"><div class="label">Место / TQI v3</div><div class="value">${trainer.rank!=null?trainer.rank:'—'} · ${trainer.score!=null?trainer.score:'—'}</div>
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${trainer.rankEligible?'в рейтинге':'мало данных для места'}</div>
       </div>
       <div class="mini-kpi"><div class="label">Day1 → итог</div><div class="value">${trainer.day1} → ${trainer.finalCount}</div>
@@ -1566,12 +1597,20 @@ function openTrainerDetail(name, opts={}){
       </div>
     </div>
     <div class="mini-kpi-grid cols-3" style="margin-top:-8px;">
-      <div class="mini-kpi"><div class="label">Качество</div><div class="value">${parts.quality!=null?parts.quality:'—'}</div></div>
-      <div class="mini-kpi"><div class="label">Вклад / надёжность</div><div class="value">${parts.contribution!=null?parts.contribution:'—'} / ${parts.reliability!=null?parts.reliability:'—'}</div></div>
-      <div class="mini-kpi"><div class="label">Yield / стабильность</div><div class="value">${parts.yield!=null?parts.yield:'—'} / ${parts.stability!=null?parts.stability:'—'}</div></div>
+      <div class="mini-kpi"><div class="label">Качество воронки</div><div class="value">${parts.quality!=null?parts.quality:'—'}</div></div>
+      <div class="mini-kpi"><div class="label">Балл 1–5 (в TQI)</div><div class="value">${parts.line!=null?parts.line:'—'}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${parts.lineFill==='personal'?'своя средняя ≥2 оценок':(parts.lineFill==='company'?'подставлена средняя компании':'нет данных журнала')}</div>
+      </div>
+      <div class="mini-kpi"><div class="label">Навыки да/нет (в TQI)</div><div class="value">${parts.skills!=null?parts.skills:'—'}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${parts.skillsFill==='personal'?'среднее «да» ≥2 ответов':(parts.skillsFill==='company'?'подставлена средняя компании':'нет данных журнала')}</div>
+      </div>
     </div>
     <div class="mini-kpi-grid cols-3" style="margin-top:-8px;">
+      <div class="mini-kpi"><div class="label">Вклад / надёжность</div><div class="value">${parts.contribution!=null?parts.contribution:'—'} / ${parts.reliability!=null?parts.reliability:'—'}</div></div>
+      <div class="mini-kpi"><div class="label">Yield / стабильность</div><div class="value">${parts.yield!=null?parts.yield:'—'} / ${parts.stability!=null?parts.stability:'—'}</div></div>
       <div class="mini-kpi"><div class="label">Отказали / перенесли</div><div class="value">${trainer.refused} / ${trainer.transferred}</div></div>
+    </div>
+    <div class="mini-kpi-grid cols-3" style="margin-top:-8px;">
       <div class="mini-kpi"><div class="label">Конв. 2→5</div><div class="value">${trainer.conv2!=null?trainer.conv2+'%':'—'}</div></div>
       <div class="mini-kpi"><div class="label">Конв. 3→5</div><div class="value">${trainer.conv3!=null?trainer.conv3+'%':'—'}</div></div>
     </div>

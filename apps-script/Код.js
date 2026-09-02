@@ -37,7 +37,7 @@ var DASHBOARD_SHEET_NAME = 'Дашборд';               // название �
 var DATA_START_ROW = 1;   // с какой строки начинать чтение
 var DATA_END_ROW = 500;   // до какой строки читать (с запасом)
 var LAST_COLUMN = 'R';    // последняя колонка с данными
-var API_CACHE_KEY = 'dashboard_json_v6';
+var API_CACHE_KEY = 'dashboard_json_v7';
 var API_CACHE_TTL_SEC = 300; // 5 минут — повторные открытия дашборда без пересчёта листа
 
 // Журнал «Выход на линию — ОС» (другая книга). Нужен доступ «Читатель» у аккаунта деплоера.
@@ -282,24 +282,26 @@ function collectDashboardData() {
     totalDay1: totalDay1
   };
   var metricsMeta = buildMetricsMeta();
-  trainerList = trainerList.map(function(row) {
-    return enrichTrainerRow(row, rankCtx, metricsMeta);
-  });
-  trainerList = assignTrainerRanks(trainerList, metricsMeta);
-
   var lineReviewPack = collectLineReviewPack(trainerList.map(function(row) { return row.name; }));
   trainerList = trainerList.map(function(row) {
     return Object.assign({}, row, {
       lineReview: lineReviewPack.byTrainer[row.name] || null
     });
   });
+  rankCtx.lineAvgScore = lineReviewPack.totals && lineReviewPack.totals.avgScore != null
+    ? lineReviewPack.totals.avgScore : null;
+  rankCtx.skillsAvgRate = meanYesRates(lineReviewPack.totals);
   metricsMeta.lineReview = Object.assign({}, metricsMeta.lineReview, {
     ok: lineReviewPack.ok,
     error: lineReviewPack.error
   });
+  trainerList = trainerList.map(function(row) {
+    return enrichTrainerRow(row, rankCtx, metricsMeta);
+  });
+  trainerList = assignTrainerRanks(trainerList, metricsMeta);
 
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     updatedAt: Utilities.formatDate(new Date(), tz, "yyyy-MM-dd'T'HH:mm:ss"),
     metrics: metricsMeta,
     totals: {
@@ -381,7 +383,7 @@ function buildDashboard() {
   var tableStartRow = 4 + summaryRows.length + 3;
   dash.getRange(tableStartRow, 1).setValue('ПО ТРЕНЕРАМ').setFontWeight('bold').setFontSize(13);
 
-  var trainerHeaders = ['Место', 'Тренер', 'TQI v2', 'Групп', 'Day1→Итог', 'Выход/гр', 'Вклад %', 'Распалось', 'Ушли %', 'Конв. 1→5', 'Конв. 2→5', 'Конв. 3→5', 'ОС 1–5'];
+  var trainerHeaders = ['Место', 'Тренер', 'TQI v3', 'Групп', 'Day1→Итог', 'Выход/гр', 'Вклад %', 'Распалось', 'Ушли %', 'Конв. 1→5', 'Конв. 2→5', 'Конв. 3→5', 'ОС 1–5'];
   var headerRow = tableStartRow + 1;
   dash.getRange(headerRow, 1, 1, trainerHeaders.length).setValues([trainerHeaders]).setFontWeight('bold').setBackground('#d9d9d9');
 
@@ -420,7 +422,7 @@ function buildDashboard() {
     .addRange(dash.getRange(headerRow, 2, trainerRows.length + 1, 1))
     .addRange(dash.getRange(headerRow, 3, trainerRows.length + 1, 1))
     .setPosition(headerRow, trainerHeaders.length + 2, 0, 0)
-    .setOption('title', 'TQI v2 по тренерам')
+    .setOption('title', 'TQI v3 по тренерам')
     .setOption('width', 600).setOption('height', 350)
     .build();
   dash.insertChart(chart1);
@@ -709,13 +711,16 @@ function buildMetricsMeta() {
     conv1to5ByTrainer: 'avgGroups',
     conv1to5ByMonth: 'weighted',
     fellApartInValid: true,
-    rankScore: 'tqi_v2',
+    rankScore: 'tqi_v3',
     rankMinGroups: 2,
     rankMinDay1: 10,
+    rankMinLineScores: 2,
     outcomeFromCompleted: true,
     completedRule: 'lineDate<=today || fellApart',
     rankWeights: {
-      quality: 0.50,
+      quality: 0.40,
+      line: 0.05,
+      skills: 0.05,
       reliability: 0.15,
       contribution: 0.20,
       yield: 0.10,
@@ -788,9 +793,44 @@ function assignTrainerRanks(list, metricsMeta) {
 }
 
 /**
- * TQI v2 — гибрид качества обучения и вклада в результат компании (0–100).
- * quality / reliability / contribution / yield / stability — см. ADR-013.
+ * TQI v3 — воронка + оценка после линии + вклад (0–100). См. ADR-016.
  */
+function meanYesRates(obj) {
+  if (!obj) return null;
+  var xs = [];
+  if (obj.scriptYesRate != null) xs.push(Number(obj.scriptYesRate));
+  if (obj.objectionsYesRate != null) xs.push(Number(obj.objectionsYesRate));
+  if (obj.crmYesRate != null) xs.push(Number(obj.crmYesRate));
+  if (!xs.length) return null;
+  var s = 0;
+  for (var i = 0; i < xs.length; i++) s += xs[i];
+  return round1(s / xs.length);
+}
+
+function skillsFilledCount(obj) {
+  if (!obj) return 0;
+  return (Number(obj.scriptFilled) || 0) + (Number(obj.objectionsFilled) || 0) + (Number(obj.crmFilled) || 0);
+}
+
+function lineQualityPart(t, metricsMeta, ctx) {
+  var minN = metricsMeta && metricsMeta.rankMinLineScores != null ? metricsMeta.rankMinLineScores : 2;
+  var lr = t && t.lineReview;
+  var personal = !!(lr && lr.avgScore != null && (Number(lr.scored) || 0) >= minN);
+  var raw = personal ? lr.avgScore : (ctx && ctx.lineAvgScore != null ? ctx.lineAvgScore : null);
+  if (raw == null) return { value: 60, fill: 'neutral' };
+  return { value: clamp100(raw / 5 * 100), fill: personal ? 'personal' : 'company' };
+}
+
+function skillsQualityPart(t, metricsMeta, ctx) {
+  var minN = metricsMeta && metricsMeta.rankMinLineScores != null ? metricsMeta.rankMinLineScores : 2;
+  var lr = t && t.lineReview;
+  var personalRate = meanYesRates(lr);
+  var personal = !!(personalRate != null && skillsFilledCount(lr) >= minN);
+  var raw = personal ? personalRate : (ctx && ctx.skillsAvgRate != null ? ctx.skillsAvgRate : null);
+  if (raw == null) return { value: 80, fill: 'neutral' };
+  return { value: clamp100(raw), fill: personal ? 'personal' : 'company' };
+}
+
 function computeTrainerScore(t, metricsMeta, ctx) {
   var c15 = t.conv1to5Weighted;
   if (c15 === null || c15 === undefined) return null;
@@ -820,15 +860,21 @@ function computeTrainerScore(t, metricsMeta, ctx) {
   var groupsOutcome = outcomeGroupCount(t);
   var avgYield = totalGroups > 0 ? totalFinal / totalGroups : 0;
   var yieldG = groupsOutcome > 0 ? (Number(t.finalCount) || 0) / groupsOutcome : 0;
-  // при среднем yield = 50; при 2× среднем = 100
   var yieldScore = avgYield > 0 ? clamp100((yieldG / avgYield) * 50) : 50;
 
   var fellShare = groupsOutcome > 0
     ? (Number(t.fellApart) || 0) / groupsOutcome * 100 : 0;
   var stability = clamp100(100 - fellShare);
 
+  var linePart = lineQualityPart(t, metricsMeta, ctx);
+  var skillsPart = skillsQualityPart(t, metricsMeta, ctx);
+  var lineW = w.line != null ? w.line : 0;
+  var skillsW = w.skills != null ? w.skills : 0;
+
   var score =
     (w.quality || 0) * quality +
+    lineW * linePart.value +
+    skillsW * skillsPart.value +
     (w.reliability || 0) * reliability +
     (w.contribution || 0) * contribution +
     (w.yield || 0) * yieldScore +
@@ -838,6 +884,10 @@ function computeTrainerScore(t, metricsMeta, ctx) {
     score: round1(score),
     parts: {
       quality: round1(quality),
+      line: round1(linePart.value),
+      lineFill: linePart.fill,
+      skills: round1(skillsPart.value),
+      skillsFill: skillsPart.fill,
       reliability: round1(reliability),
       contribution: round1(contribution),
       yield: round1(yieldScore),

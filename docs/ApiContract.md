@@ -5,8 +5,8 @@
 - Endpoint: `GET {WEB_APP_URL}/exec`
 - Content-Type: `application/json`
 - Auth: нет (публичный URL)
-- **schemaVersion:** `6` (текущий)
-- Кэш: Script Cache на 300с (`dashboard_json_v6`); `?refresh=1` принудительно пересчитывает
+- **schemaVersion:** `7` (текущий)
+- Кэш: Script Cache на 300с (`dashboard_json_v7`); `?refresh=1` принудительно пересчитывает
 - В ответе опционально `cache: { hit: boolean, ttlSec: number }`
 
 Текущий deployment ID (URL `/exec`):  
@@ -16,7 +16,7 @@
 
 ```ts
 type DashboardPayload = {
-  schemaVersion: number;      // сейчас 6
+  schemaVersion: number;      // сейчас 7
   updatedAt: string;
   metrics: MetricsMeta;
   totals: Totals;
@@ -33,11 +33,12 @@ type DashboardPayload = {
 |------|-----|-------|
 | `conv1to5Totals` / `ByTrainer` / `ByMonth` | string | формулы конверсий |
 | `fellApartInValid` | boolean | «распалась» в valid |
-| `rankScore` | string | `'tqi_v2'` |
+| `rankScore` | string | `'tqi_v3'` |
 | `rankMinGroups` / `rankMinDay1` | number | 2 / 10; порог групп — по **законченным** |
-| `outcomeFromCompleted` | boolean | `true`: воронка/выход/TQI только по законченным |
+| `rankMinLineScores` | number | 2; ниже — в TQI подставляется средняя компании по журналу ОС |
+| `outcomeFromCompleted` | boolean | `true`: воронка/выход/TQI-воронка только по законченным |
 | `completedRule` | string | `'lineDate<=today || fellApart'` |
-| `rankWeights` | object | `quality`, `reliability`, `contribution`, `yield`, `stability` (сумма 1.0) |
+| `rankWeights` | object | `quality`, `line`, `skills`, `reliability`, `contribution`, `yield`, `stability` (сумма 1.0) |
 | `qualityMix` | object | доли внутри quality: `conv1to5`, `conv2`, `conv3` |
 | `contribFullAtShare` | number | доля итоговых выходов компании = 100 по оси вклада (0.25) |
 | `reliabilityRefDay1` | number | опорный day1 для log-шкалы (200) |
@@ -69,8 +70,8 @@ type DashboardPayload = {
 | `fellShare` | number | % распавшихся от **законченных** |
 | `yieldPerGroup` | number \| null | final / groupsCompleted |
 | `contributionShare` | number | доля `finalCount` тренера от totals.finalCount, % |
-| `score` | number \| null | **TQI v2** 0–100 (по законченным) |
-| `scoreParts` | object \| null | `{ quality, reliability, contribution, yield, stability }` |
+| `score` | number \| null | **TQI v3** 0–100 (воронка по законченным + линия за весь журнал) |
+| `scoreParts` | object \| null | `{ quality, line, lineFill, skills, skillsFill, reliability, contribution, yield, stability }` |
 | `rank` | number \| null | место среди eligible |
 | `rankEligible` | boolean | ≥ `rankMinGroups` **законченных** и ≥ `rankMinDay1` |
 | `lineReview` | object \| null | оценка после линии; `null` если нет склеенных строк |
@@ -91,20 +92,25 @@ type DashboardPayload = {
 
 Склейка: срез префикса «Тренер», ключ = фамилия + имя (отчество не обязательно). Каноническое имя — из «Контроль штата обучения».
 
-### TQI v2
+### TQI v3
 
 ```
 quality      = 0.60·C15 + 0.25·C2' + 0.15·C3'
+line         = (avgScore / 5) × 100     // scored ≥ 2, иначе avg компании, иначе 60
+skills       = mean(scriptYesRate, objectionsYesRate, crmYesRate)
+             // только заполненные да/нет; filled ≥ 2, иначе avg компании, иначе 80
 reliability  = log(day1+1)/log(201)*100
 contribution = min(100, shareFinal / 0.25 * 100)
 yield        = min(100, (final/groupsCompleted) / companyAvgYield * 50)
-stability    = 100 − fellShare%   // fellApart / groupsCompleted
+stability    = 100 − fellShare%
 
-TQI = 0.50·quality + 0.15·reliability + 0.20·contribution
-    + 0.10·yield + 0.05·stability
+TQI = 0.40·quality + 0.05·line + 0.05·skills + 0.15·reliability
+    + 0.20·contribution + 0.10·yield + 0.05·stability
 ```
 
-UI при фильтре месяца пересчитывает score/rank той же формулой относительно totals области.
+`scoreParts.lineFill` / `skillsFill`: `'personal'` \| `'company'` \| `'neutral'`.
+
+UI при фильтре месяца пересчитывает воронку той же формулой; **line и skills не режутся месяцем**.
 
 ## `byMonth[]`
 
@@ -121,6 +127,7 @@ UI при фильтре месяца пересчитывает score/rank то
 
 ## Совместимость
 
+- v7: TQI v3 (балл 1–5 5% + навыки да/нет 5%); кэш `dashboard_json_v7`.
 - v6: `lineReview` у totals/byTrainer + `metrics.lineReview`; кэш `dashboard_json_v6`. TQI без изменений.
 - v5: outcome-метрики только по законченным группам; новые поля `completed`, `lineDate`, `groupsCompleted`, `groupsInProgress`; ключ кэша `dashboard_json_v5`.
 - v4: TQI v2; ключ `dashboard_json_v4`.
