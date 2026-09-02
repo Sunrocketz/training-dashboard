@@ -317,7 +317,7 @@
 
 <script>
 const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNjs7MKzbt9Fw/exec';
-const LOCAL_CACHE_KEY = 'trainingDashboard:lastPayload:v4';
+const LOCAL_CACHE_KEY = 'trainingDashboard:lastPayload:v5';
 
 let dashboardData = null;
 let viewData = null;
@@ -340,7 +340,8 @@ const DEFAULT_METRICS = {
   },
   qualityMix: { conv1to5: 0.60, conv2: 0.25, conv3: 0.15 },
   contribFullAtShare: 0.25,
-  reliabilityRefDay1: 200
+  reliabilityRefDay1: 200,
+  excludedTrainers: []
 };
 
 function destroyChart(key){ if(charts[key]){ charts[key].destroy(); delete charts[key]; } }
@@ -424,6 +425,24 @@ function score15BadgeClass(value){
   if(value>=m.badgeHigh) return 'success';
   if(value>=m.badgeLow) return 'warning';
   return 'danger';
+}
+
+function foldYo(s){
+  return String(s||'').replace(/ё/gi,'е');
+}
+function trainerMatchKey(value){
+  let name = String(value||'').trim().replace(/\s+/g,' ').replace(/\s*\([^)]*\)\s*/g,'').trim();
+  name = name.replace(/^тренер[:.\s]+/i,'').trim();
+  if(!name || name==='Без имени') return '';
+  name = foldYo(name).toLowerCase();
+  const parts = name.split(' ');
+  return parts.length>=2 ? parts[0]+'|'+parts[1] : name;
+}
+function isExcludedTrainer(name){
+  const list = (metrics().excludedTrainers)||[];
+  const key = trainerMatchKey(name);
+  if(!key) return false;
+  return list.some(ex=>trainerMatchKey(ex)===key);
 }
 
 function lineReviewOf(t){
@@ -561,7 +580,7 @@ function trainerRankEligible(t){
 
 function rankedTrainers(list, totals){
   const ctx = scoreContextFromTotals(totals || {});
-  const enriched = (list||[]).map(t=>enrichTrainer(t, ctx));
+  const enriched = (list||[]).filter(t=>!isExcludedTrainer(t && t.name)).map(t=>enrichTrainer(t, ctx));
   const eligible = enriched.filter(trainerRankEligible)
     .sort((a,b)=> b.score!==a.score ? b.score-a.score : (b.finalCount||0)-(a.finalCount||0));
   const rankByName = {};
@@ -642,6 +661,7 @@ function aggregateFromGroups(groups, raw){
 
   const byTrainerMap = {};
   groups.forEach(g=>{
+    if(isExcludedTrainer(g.trainer)) return;
     if(!byTrainerMap[g.trainer]){
       byTrainerMap[g.trainer] = {
         name:g.trainer, groups:0, groupsCompleted:0, groupsInProgress:0,
@@ -1183,7 +1203,7 @@ function renderLineReviewSection(data){
         <tbody>${rows}</tbody>
       </table>
     </div>
-    <div class="footnote">Берём только число 1–5 из колонки подготовки. Прогноз, комментарии и ФИО учеников в API не попадают.${err?` ${err}.`:''}</div>
+    <div class="footnote">Берём только число 1–5 из колонки подготовки. Прогноз, комментарии и ФИО учеников в API не попадают. Уволенные тренеры в таблице не показываются.${err?` ${err}.`:''}</div>
   </div>`;
 }
 
@@ -1401,7 +1421,7 @@ function fullTrainerRankSection(data, insights){
         <tbody id="rankBody">${body}</tbody>
       </table>
     </div>
-    <div class="footnote">Место: ≥${m.rankMinGroups||2} законченных групп и ≥${m.rankMinDay1||10} чел. на 1-м дне. «Оценка кандидатов» — среднее «да» по скрипту, возражениям и CRM из журнала ОС (в TQI 5%). Свои цифры при ≥${m.rankMinLineScores||2} ответах, иначе средняя компании (весь журнал). «Части»: К=воронка, Л=балл 1–5, Н=оценка кандидатов. Клик — карточка.</div>
+    <div class="footnote">Место: ≥${m.rankMinGroups||2} законченных групп и ≥${m.rankMinDay1||10} чел. на 1-м дне. «Оценка кандидатов» — среднее «да» по скрипту, возражениям и CRM из журнала ОС (в TQI 5%). Свои цифры при ≥${m.rankMinLineScores||2} ответах, иначе средняя компании (весь журнал, без уволенных). «Части»: К=воронка, Л=балл 1–5, Н=оценка кандидатов. Клик — карточка.</div>
   </div>`;
 }
 function monthSummaryMiniCard(data){
@@ -1730,6 +1750,7 @@ function openMonthDetail(month, opts={}){
 
   const byTrainer = {};
   groups.forEach(g=>{
+    if(isExcludedTrainer(g.trainer)) return;
     if(!byTrainer[g.trainer]) byTrainer[g.trainer] = {name:g.trainer, day1:0, finalCount:0, groups:0, leftSelf:0, refused:0, transferred:0};
     byTrainer[g.trainer].groups += 1;
     if(!groupCompleted(g)) return;
