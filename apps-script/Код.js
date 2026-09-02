@@ -44,7 +44,7 @@ var API_CACHE_TTL_SEC = 300; // 5 минут — повторные открыт
 var LINE_REVIEW_SPREADSHEET_ID = '1uNE9nPtI2JxnbBSf1YQXd8BC991tkVL5nWF77YKyrmI';
 var LINE_REVIEW_SHEET_NAME = '2026';
 var LINE_REVIEW_DATA_END_ROW = 500;
-var LINE_REVIEW_LAST_COLUMN = 'L';
+var LINE_REVIEW_LAST_COLUMN = 'M';
 // =================================================================
 
 var COL = {
@@ -57,11 +57,10 @@ var COL = {
 var LINE_COL = {
   employee: 0, // A — ФИО, в JSON не отдаём
   trainer: 2,  // C
-  script: 3,   // D да/нет
-  objections: 4, // E да/нет
-  crm: 5,      // F да/нет
-  score: 9,    // J подготовка 1–5; из-за съезда колонок смотрим ещё I и K
-  scoreNearby: [8, 10] // I прогноз (иногда туда ставят число), K «чего не хватило»
+  script: 3,   // D да/нет (E — комментарий, не читаем)
+  objections: 5, // F да/нет (G — комментарий)
+  crm: 7,      // H да/нет (I — комментарий)
+  score: 12    // M подготовка 1–5; L прогноз не берём
 };
 
 function onOpen() {
@@ -519,15 +518,6 @@ function trainerMatchKey(value) {
   return name.toLowerCase();
 }
 
-function firstScore15(row) {
-  var idxs = [LINE_COL.score].concat(LINE_COL.scoreNearby || []);
-  for (var i = 0; i < idxs.length; i++) {
-    var v = parseScore15(row[idxs[i]]);
-    if (v !== null) return v;
-  }
-  return null;
-}
-
 function parseScore15(value) {
   if (value === '' || value === null || value === undefined) return null;
   if (typeof value === 'number') {
@@ -665,7 +655,7 @@ function collectLineReviewPack(canonicalNames) {
         return;
       }
       if (!byKey[canonical]) byKey[canonical] = emptyLineReviewAgg();
-      var score = firstScore15(row);
+      var score = parseScore15(row[LINE_COL.score]);
       var script = parseYesNo(row[LINE_COL.script]);
       var objections = parseYesNo(row[LINE_COL.objections]);
       var crm = parseYesNo(row[LINE_COL.crm]);
