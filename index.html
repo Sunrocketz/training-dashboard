@@ -904,7 +904,7 @@ function exportActiveTabCsv(){
   const tab = document.querySelector('.tab-btn.active')?.dataset.tab || 'overview';
   const stamp = new Date().toISOString().slice(0,10);
   if(tab === 'trainers'){
-    const rows = [['Место','Тренер','TQI v3','Групп','Закончились','В обучении','Day1','Итог','Выход/гр','Вклад %','Распалось','Ушли %','Конв 1→5','Конв 2→5','Конв 3→5','ОС оценка','ОС оценок','Скрипт %','Возражения %','CRM %','Качество','Линия','Навыки','Надёжность','ВкладЧасть','YieldЧасть','Стабильность']];
+    const rows = [['Место','Тренер','TQI v3','Групп','Закончились','В обучении','Day1','Итог','Выход/гр','Вклад %','Распалось','Ушли %','Конв 1→5','Конв 2→5','Конв 3→5','ОС оценка','ОС оценок','Скрипт %','Возражения %','CRM %','Качество','Линия','Оценка кандидатов','Надёжность','ВкладЧасть','YieldЧасть','Стабильность']];
     rankedTrainers(viewData.byTrainer, viewData.totals).forEach(t=>{
       const p = t.scoreParts || {};
       const lr = lineReviewOf(t) || {};
@@ -1164,7 +1164,7 @@ function renderLineReviewSection(data){
   return `<div class="section">
     <div class="section-head">
       <h2>Оценка после линии</h2>
-      <div class="desc">Журнал супервайзеров · балл 1–5 и доля «да» входят в TQI · ${data.periodFiltered?'не зависит от фильтра месяца':'весь журнал'}</div>
+      <div class="desc">Журнал супервайзеров · балл 1–5 и оценка кандидатов (скрипт / возражения / CRM) входят в TQI · ${data.periodFiltered?'не зависит от фильтра месяца':'весь журнал'}</div>
     </div>
     <div class="mini-kpi-grid cols-3">
       <div class="mini-kpi"><div class="label">Средняя подготовка</div><div class="value">${avg!=null?avg:'—'}</div>
@@ -1361,6 +1361,10 @@ function trainerConv(t){
   return t.conv1to5Weighted!=null ? t.conv1to5Weighted : t.conv1to5;
 }
 
+function trainerSkillsPct(t){
+  return t && t.scoreParts && t.scoreParts.skills!=null ? t.scoreParts.skills : null;
+}
+
 function fullTrainerRankSection(data, insights){
   const m = metrics();
   const rows = insights.trainers;
@@ -1372,6 +1376,7 @@ function fullTrainerRankSection(data, insights){
       <td><span class="badge ${tone||'neutral'}">${place}</span></td>
       <td>${t.name}${!t.rankEligible?' <span style="color:var(--text-muted);font-size:11px;">мало данных</span>':''}</td>
       <td><span class="badge ${pctBadgeClass(t.score)}">${t.score!=null?t.score:'—'}</span></td>
+      <td><span class="badge ${pctBadgeClass(trainerSkillsPct(t))}">${trainerSkillsPct(t)!=null?trainerSkillsPct(t)+'%':'—'}</span></td>
       <td>${t.groups}${groupsInProgressCount(t)?` <span style="color:var(--text-muted);font-size:11px;">/${outcomeGroupCount(t)}</span>`:''}</td>
       <td>${t.day1} → ${t.finalCount}</td>
       <td>${t.yieldPerGroup!=null?t.yieldPerGroup:'—'}</td>
@@ -1381,22 +1386,22 @@ function fullTrainerRankSection(data, insights){
       <td>${t.fellShare!=null?t.fellShare+'%':'—'}</td>
       <td style="font-size:11px;color:var(--text-muted);">${parts.quality!=null?`К${parts.quality}`:''} ${parts.line!=null?`Л${parts.line}`:''} ${parts.skills!=null?`Н${parts.skills}`:''}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="11" style="font-family:var(--font-body);color:var(--text-muted);">Нет тренеров</td></tr>';
+  }).join('') || '<tr><td colspan="12" style="font-family:var(--font-body);color:var(--text-muted);">Нет тренеров</td></tr>';
 
   return `<div class="section">
     <div class="section-head">
       <h2>Полный рейтинг тренеров (TQI v3)</h2>
-      <div class="desc">Гибрид: воронка 40% · балл 1–5 5% · скрипт/возр./CRM 5% · надёжность 15% · вклад 20% · выход/группу 10% · стабильность 5% · ${periodScopeLabel(data.periodFiltered)}</div>
+      <div class="desc">Гибрид: воронка 40% · балл 1–5 5% · оценка кандидатов 5% (скрипт / возражения / CRM) · надёжность 15% · вклад 20% · выход/группу 10% · стабильность 5% · ${periodScopeLabel(data.periodFiltered)}</div>
     </div>
     <div style="overflow-x:auto;">
       <table class="dropout-table" id="rankTable">
         <thead><tr>
-          <th>#</th><th>Тренер</th><th>TQI</th><th>Гр.</th><th>Day1 → итог</th><th>Выход/гр</th><th>Вклад</th><th>1→5</th><th>Ушли %</th><th>Распад %</th><th>Части</th>
+          <th>#</th><th>Тренер</th><th>TQI</th><th>Оценка кандидатов</th><th>Гр.</th><th>Day1 → итог</th><th>Выход/гр</th><th>Вклад</th><th>1→5</th><th>Ушли %</th><th>Распад %</th><th>Части</th>
         </tr></thead>
         <tbody id="rankBody">${body}</tbody>
       </table>
     </div>
-    <div class="footnote">Место: ≥${m.rankMinGroups||2} законченных групп и ≥${m.rankMinDay1||10} чел. на 1-м дне. Линия и навыки в TQI: свои цифры при ≥${m.rankMinLineScores||2} ответах, иначе средняя компании (весь журнал ОС). «Части»: К=воронка, Л=балл 1–5, Н=доля «да» по скрипту/возражениям/CRM. Клик — карточка.</div>
+    <div class="footnote">Место: ≥${m.rankMinGroups||2} законченных групп и ≥${m.rankMinDay1||10} чел. на 1-м дне. «Оценка кандидатов» — среднее «да» по скрипту, возражениям и CRM из журнала ОС (в TQI 5%). Свои цифры при ≥${m.rankMinLineScores||2} ответах, иначе средняя компании (весь журнал). «Части»: К=воронка, Л=балл 1–5, Н=оценка кандидатов. Клик — карточка.</div>
   </div>`;
 }
 function monthSummaryMiniCard(data){
@@ -1456,7 +1461,7 @@ function renderTrainersTab(data){
       <div>
         <div class="eyebrow">Вкладка тренеров</div>
         <div class="headline">${data.periodFiltered ? `Тренеры за месяц «${periodMonth}»` : 'Тренеры за весь период'}</div>
-        <div class="support">Рейтинг TQI v3: воронка 40% + балл подготовки 5% + доля «да» (скрипт/возражения/CRM) 5% + вклад и стабильность. Журнал ОС — весь, даже если выбран месяц. Полный список — на вкладке «Обзор».</div>
+        <div class="support">Рейтинг TQI v3: воронка 40% + балл подготовки 5% + оценка кандидатов 5% (скрипт / возражения / CRM) + вклад и стабильность. Журнал ОС — весь, даже если выбран месяц. Полный список — на вкладке «Обзор».</div>
       </div>
       <div class="side-note">Клик по строке — карточка. Сортировка по заголовку.</div>
     </div>
@@ -1480,6 +1485,8 @@ function renderTrainerTable(data){
     let av, bv;
     if(key==='lineScore'){
       av = a.lineReview && a.lineReview.avgScore; bv = b.lineReview && b.lineReview.avgScore;
+    } else if(key==='skillsScore'){
+      av = trainerSkillsPct(a); bv = trainerSkillsPct(b);
     } else {
       av=a[key]; bv=b[key];
     }
@@ -1492,7 +1499,7 @@ function renderTrainerTable(data){
     return trainerSortState.dir==='asc'? av-bv : bv-av;
   });
   const cols = [
-    ['rank','#'],['name','Тренер'],['score','TQI v3'],['lineScore','ОС 1–5'],['groups','Групп'],['day1','Day1'],['finalCount','Итог'],
+    ['rank','#'],['name','Тренер'],['score','TQI v3'],['lineScore','ОС 1–5'],['skillsScore','Оценка кандидатов'],['groups','Групп'],['day1','Day1'],['finalCount','Итог'],
     ['yieldPerGroup','Выход/гр'],['contributionShare','Вклад %'],['fellApart','Распалось'],
     ['leftRate','Ушли %'],['conv1to5Weighted','Конв. 1→5'],['conv2','Конв. 2→5'],['conv3','Конв. 3→5']
   ];
@@ -1506,6 +1513,7 @@ function renderTrainerTable(data){
       <td>${t.name}</td>
       <td><span class="badge ${pctBadgeClass(t.score)}">${t.score!=null?t.score:'—'}</span></td>
       <td><span class="badge ${score15BadgeClass(t.lineReview && t.lineReview.avgScore)}">${t.lineReview && t.lineReview.avgScore!=null?t.lineReview.avgScore:'—'}</span></td>
+      <td><span class="badge ${pctBadgeClass(trainerSkillsPct(t))}">${trainerSkillsPct(t)!=null?trainerSkillsPct(t)+'%':'—'}</span></td>
       <td>${t.groups}${groupsInProgressCount(t)?` <span style="color:var(--text-muted);font-size:11px;">/${outcomeGroupCount(t)}</span>`:''}</td><td>${t.day1}</td><td>${t.finalCount}</td>
       <td>${t.yieldPerGroup!=null?t.yieldPerGroup:'—'}</td>
       <td>${t.contributionShare!=null?t.contributionShare+'%':'—'}</td>
@@ -1601,8 +1609,8 @@ function openTrainerDetail(name, opts={}){
       <div class="mini-kpi"><div class="label">Балл 1–5 (в TQI)</div><div class="value">${parts.line!=null?parts.line:'—'}</div>
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${parts.lineFill==='personal'?'своя средняя ≥2 оценок':(parts.lineFill==='company'?'подставлена средняя компании':'нет данных журнала')}</div>
       </div>
-      <div class="mini-kpi"><div class="label">Навыки да/нет (в TQI)</div><div class="value">${parts.skills!=null?parts.skills:'—'}</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${parts.skillsFill==='personal'?'среднее «да» ≥2 ответов':(parts.skillsFill==='company'?'подставлена средняя компании':'нет данных журнала')}</div>
+      <div class="mini-kpi"><div class="label">Оценка кандидатов (в TQI)</div><div class="value">${parts.skills!=null?parts.skills:'—'}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">скрипт / возражения / CRM · ${parts.skillsFill==='personal'?'своё среднее «да» ≥2 ответов':(parts.skillsFill==='company'?'подставлена средняя компании':'нет данных журнала')}</div>
       </div>
     </div>
     <div class="mini-kpi-grid cols-3" style="margin-top:-8px;">

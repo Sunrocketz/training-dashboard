@@ -15,6 +15,7 @@
   - `skills` = среднее `scriptYesRate`, `objectionsYesRate`, `crmYesRate` (только заполненные да/нет; пусто ≠ нет). Свои доли, если сумма filled ≥ 2. Иначе средняя компании. Нет журнала — 80.
   - Фильтр месяца не режет линию и навыки.
   - `schemaVersion: 7`, кэш `dashboard_json_v7`; `scoreParts.line` / `lineFill` / `skills` / `skillsFill`.
+  - UI полный рейтинг и вкладка тренеров: колонка **«Оценка кандидатов»** = `scoreParts.skills` (скрипт / возражения / CRM).
 - **Последствия:** `score` и места несравнимы с v2. GAS считает TQI после склейки `lineReview`.
 
 ## ADR-015 — Оценка после линии из журнала ОС (schemaVersion 6)
