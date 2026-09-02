@@ -55,12 +55,12 @@ var COL = {
 };
 
 var LINE_COL = {
-  employee: 1, // B — ФИО, в JSON не отдаём
-  trainer: 3,  // D
-  script: 4,   // E да/нет
-  objections: 5, // F да/нет
-  crm: 6,      // G да/нет
-  score: 10    // K подготовка 1–5; прогноз и комментарии не читаем
+  employee: 0, // A — ФИО, в JSON не отдаём
+  trainer: 2,  // C
+  script: 3,   // D да/нет
+  objections: 4, // E да/нет
+  crm: 5,      // F да/нет
+  score: 9     // J подготовка 1–5; прогноз и комментарии не читаем
 };
 
 function onOpen() {
