@@ -37,7 +37,7 @@ var DASHBOARD_SHEET_NAME = 'Дашборд';               // название �
 var DATA_START_ROW = 1;   // с какой строки начинать чтение
 var DATA_END_ROW = 500;   // до какой строки читать (с запасом)
 var LAST_COLUMN = 'R';    // последняя колонка с данными
-var API_CACHE_KEY = 'dashboard_json_v7';
+var API_CACHE_KEY = 'dashboard_json_v7e';
 var API_CACHE_TTL_SEC = 300; // 5 минут — повторные открытия дашборда без пересчёта листа
 
 // Журнал «Выход на линию — ОС» (другая книга). Нужен доступ «Читатель» у аккаунта деплоера.
@@ -512,12 +512,17 @@ function stripTrainerRolePrefix(name) {
   return String(name || '').replace(/^тренер[:.\s]+/i, '').trim();
 }
 
+function foldYo(s) {
+  return String(s || '').replace(/ё/gi, 'е');
+}
+
 function trainerMatchKey(value) {
   var name = stripTrainerRolePrefix(normalizeName(value));
   if (!name || name === 'Без имени') return '';
+  name = foldYo(name).toLowerCase();
   var parts = name.split(' ');
-  if (parts.length >= 2) return (parts[0] + '|' + parts[1]).toLowerCase();
-  return name.toLowerCase();
+  if (parts.length >= 2) return parts[0] + '|' + parts[1];
+  return name;
 }
 
 function parseScore15(value) {

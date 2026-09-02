@@ -48,7 +48,7 @@ training-dashboard/
 | Collect | `collectDashboardData`, `collectLineReviewPack` | Сначала журнал ОС, затем TQI v3 + payload |
 | Sheet UI | `buildDashboard`, `onOpen` | Лист «Дашборд» |
 | HTTP | `doGet` | JSON response |
-| Utils | `normalizeName`, `trainerMatchKey`, `parseScore15`, `parseYesNo`, `parsePercent`, `sumColumn`, `round1` | Нормализация |
+| Utils | `normalizeName`, `foldYo`, `trainerMatchKey`, `parseScore15`, `parseYesNo`, `parsePercent`, `sumColumn`, `round1` | Нормализация |
 
 ## Внешние модули (не в git)
 
