@@ -44,7 +44,7 @@ var API_CACHE_TTL_SEC = 300; // 5 минут — повторные открыт
 var LINE_REVIEW_SPREADSHEET_ID = '1uNE9nPtI2JxnbBSf1YQXd8BC991tkVL5nWF77YKyrmI';
 var LINE_REVIEW_SHEET_NAME = '2026';
 var LINE_REVIEW_DATA_END_ROW = 500;
-var LINE_REVIEW_LAST_COLUMN = 'K';
+var LINE_REVIEW_LAST_COLUMN = 'L';
 // =================================================================
 
 var COL = {
@@ -60,7 +60,8 @@ var LINE_COL = {
   script: 3,   // D да/нет
   objections: 4, // E да/нет
   crm: 5,      // F да/нет
-  score: 9     // J подготовка 1–5; прогноз и комментарии не читаем
+  score: 9,    // J подготовка 1–5; из-за съезда колонок смотрим ещё I и K
+  scoreNearby: [8, 10] // I прогноз (иногда туда ставят число), K «чего не хватило»
 };
 
 function onOpen() {
@@ -518,6 +519,15 @@ function trainerMatchKey(value) {
   return name.toLowerCase();
 }
 
+function firstScore15(row) {
+  var idxs = [LINE_COL.score].concat(LINE_COL.scoreNearby || []);
+  for (var i = 0; i < idxs.length; i++) {
+    var v = parseScore15(row[idxs[i]]);
+    if (v !== null) return v;
+  }
+  return null;
+}
+
 function parseScore15(value) {
   if (value === '' || value === null || value === undefined) return null;
   if (typeof value === 'number') {
@@ -529,8 +539,9 @@ function parseScore15(value) {
   s = s.replace(',', '.');
   s = s.replace(/(\d)\.\s*[.,]?\s*(\d)/, '$1.$2');
   if (/[–—-]/.test(s)) return null;
-  if (!/^[1-5](\.\d+)?$/.test(s)) return null;
-  var n = parseFloat(s);
+  var m = s.match(/^([1-5](?:\.\d+)?)(?!\d)/);
+  if (!m) return null;
+  var n = parseFloat(m[1]);
   if (isNaN(n) || n < 1 || n > 5) return null;
   return round1(n);
 }
@@ -654,7 +665,7 @@ function collectLineReviewPack(canonicalNames) {
         return;
       }
       if (!byKey[canonical]) byKey[canonical] = emptyLineReviewAgg();
-      var score = parseScore15(row[LINE_COL.score]);
+      var score = firstScore15(row);
       var script = parseYesNo(row[LINE_COL.script]);
       var objections = parseYesNo(row[LINE_COL.objections]);
       var crm = parseYesNo(row[LINE_COL.crm]);
