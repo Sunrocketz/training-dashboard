@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(clasp status:*)",
+      "Bash(clasp deployments:*)",
+      "Bash(clasp versions:*)",
+      "PowerShell(git status:*)",
+      "PowerShell(git diff:*)",
+      "PowerShell(git log:*)",
+      "PowerShell(git show:*)",
+      "PowerShell(git branch:*)",
+      "PowerShell(clasp status:*)",
+      "PowerShell(clasp deployments:*)",
+      "PowerShell(clasp versions:*)"
+    ],
+    "ask": [
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(clasp push:*)",
+      "Bash(clasp deploy:*)",
+      "Bash(clasp undeploy:*)",
+      "Bash(clasp redeploy:*)",
+      "Bash(netlify deploy:*)",
+      "PowerShell(git commit:*)",
+      "PowerShell(git push:*)",
+      "PowerShell(clasp push:*)",
+      "PowerShell(clasp deploy:*)",
+      "PowerShell(clasp undeploy:*)",
+      "PowerShell(clasp redeploy:*)",
+      "PowerShell(netlify deploy:*)"
+    ],
+    "deny": [
+      "Read(~/.clasprc.json)",
+      "Read(./**/.clasprc.json)",
+      "Read(./.env)",
+      "Read(./.env.*)"
+    ]
+  }
+}

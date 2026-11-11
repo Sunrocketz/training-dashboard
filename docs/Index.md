@@ -9,6 +9,7 @@
 | [../README.md](../README.md) | Обзор репозитория, стек, ссылки |
 | [../.cursor/rules/00-project.mdc](../.cursor/rules/00-project.mdc) | Главные правила — тегать `@00-project.mdc` |
 | [../AGENTS.md](../AGENTS.md) | Указатель → 00-project.mdc |
+| [../CLAUDE.md](../CLAUDE.md) | Вход для Claude Code — импортирует все `.cursor/rules/*.mdc` |
 | [Architecture.md](Architecture.md) | Как устроена система end-to-end |
 | [Modules.md](Modules.md) | Карта модулей и зон ответственности |
 
@@ -38,6 +39,8 @@
 | [../.cursor/rules/00-project.mdc](../.cursor/rules/00-project.mdc) | Всегда (главные правила) |
 | [../.cursor/rules/frontend.mdc](../.cursor/rules/frontend.mdc) | `index.html` |
 | [../.cursor/rules/apps-script.mdc](../.cursor/rules/apps-script.mdc) | `apps-script/**` |
+
+Claude Code читает эти же файлы через импорты в [../CLAUDE.md](../CLAUDE.md); права на команды (подтверждение commit/push/clasp push/deploy) — в [../.claude/settings.json](../.claude/settings.json).
 
 ## Как поддерживать docs
 
