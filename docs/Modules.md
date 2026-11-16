@@ -39,7 +39,8 @@ training-dashboard/
 
 - `fetchData`, `buildViewData`, `aggregateFromGroups`, `momContext`
 - `renderAll` / `renderOverview` / `renderLineReviewSection` / `renderTrainersTab` / `renderMonthsTab`
-- `openTrainerDetail` / `openMonthDetail` — сводки из `groups` + отсев + `lineReview`
+- `openTrainerDetail` / `openMonthDetail` — сводки из `groups` + отсев + `lineReview`; у тренера переключатель периода (`opts.scopeMonth`)
+- `openGroupDetail` / `groupIndexOf` — карточка одной группы (индекс в `groups[]` как ключ)
 - `validGroupsOf` / `notGatheredGroupsOf` / `isNotGathered` — v8: «не собралась» в `groups[]` только для показа (ADR-021); `groupTypeOf` / `groupTypeTag` — тип группы из комментария
 - `buildWeeksIndex` / `summarizeWeek` / `weekTrainerRows` / `renderWeeksTab` / `groupTodayState` / `groupCardHtml` / `weekBriefHtml` / `renderWeekFunnel` / `renderWeekTrendChart` — недели из `groups` (старт по `startDate`, итог по `lineDate`)
 

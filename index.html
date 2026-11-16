@@ -226,9 +226,17 @@
   .wk-status.fell, .wk-status.notg{background:var(--danger-soft); color:var(--danger);}
   .wk-card.notg{opacity:.75; background:var(--surface-2);}
   .wk-type{margin-top:6px;}
-  #detailPanel .wk-card{cursor:default;}
-  #detailPanel .wk-card:hover{border-color:var(--border);}
-  #detailPanel .wk-card.live:hover{border-color:#C9D2FB;}
+  .scope-bar{
+    display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; justify-content:space-between;
+    margin:4px 0 12px; padding-top:12px; border-top:1px solid var(--border-soft);
+  }
+  .scope-bar h2{font-family:var(--font-display); font-size:var(--fs-title); font-weight:700;}
+  .scope-bar label{font-size:var(--fs-meta); font-weight:600; color:var(--text-secondary); display:flex; gap:8px; align-items:center;}
+  .scope-bar select{
+    background:var(--surface-2); border:1px solid var(--border); border-radius:8px;
+    color:var(--text-primary); font-size:13px; padding:7px 10px;
+  }
+  #trainerGroupsTable tbody tr{cursor:pointer;}
   .wk-status.soon, .wk-status.weekend{background:var(--warning-soft); color:var(--warning);}
   .wk-steps{display:flex; gap:4px; margin:12px 0 4px;}
   .wk-step{flex:1; height:8px; border-radius:4px; background:var(--surface-3);}
@@ -1733,8 +1741,11 @@ function renderTrainerLineReviewBlock(trainer){
  * opts.fullPeriod — общий обзор за весь период (фильтр месяца на вкладке недель скрыт и не должен действовать).
  */
 function openTrainerDetail(name, opts={}){
-  const scopeMonth = opts.fullPeriod ? '' : periodMonth;
-  const data = opts.fullPeriod ? buildViewData(dashboardData, '') : viewData;
+  // opts.scopeMonth — выбор в переключателе «Период» внутри карточки ('' = весь период)
+  const scopeMonth = opts.scopeMonth !== undefined ? opts.scopeMonth : (opts.fullPeriod ? '' : periodMonth);
+  const data = scopeMonth === periodMonth ? viewData : buildViewData(dashboardData, scopeMonth);
+  const trainerMonths = (dashboardData.byMonth||[]).map(m=>m.month)
+    .filter(m=>validGroupsOf(dashboardData.groups).some(g=>g.trainer===name && g.month===m));
   const trainer = rankedTrainers(data.byTrainer, data.totals).find(t=>t.name===name)
     || withTrainerScore(data.byTrainer.find(t=>t.name===name) || {}, scoreContextFromTotals(data.totals));
   if(!trainer || !trainer.name) return;
@@ -1773,6 +1784,15 @@ function openTrainerDetail(name, opts={}){
       </div>
     </div>
     ${opts.weekKey ? trainerWeekBlockHtml(name, opts.weekKey) : ''}
+    <div class="scope-bar">
+      <h2>${scopeMonth ? `Месяц «${scopeMonth}»` : 'Весь период'}</h2>
+      <label>Период
+        <select id="trainerScopeSelect" aria-label="Период карточки тренера">
+          <option value="">Весь период</option>
+          ${trainerMonths.map(m=>`<option value="${m}" ${m===scopeMonth?'selected':''}>${m}</option>`).join('')}
+        </select>
+      </label>
+    </div>
     <div class="mini-kpi-grid">
       <div class="mini-kpi"><div class="label">Место / TQI v3</div><div class="value">${trainer.rank!=null?trainer.rank:'—'} · ${trainer.score!=null?trainer.score:'—'}</div>
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${trainer.rankEligible?'в рейтинге':'мало данных для места'}</div>
@@ -1809,11 +1829,11 @@ function openTrainerDetail(name, opts={}){
     <div class="footnote" style="margin:-2px 0 14px;">Область: ${scopeMonth?`месяц «${scopeMonth}»`:'весь период'}. Воронка и конверсии — законченные группы. Оценка после линии — весь журнал ОС. «В обучении» видны в списке, но не в цифрах результата.</div>
     <div class="section-head"><h2>Воронка тренера</h2></div>
     <div class="funnel" id="trainerFunnel" style="margin-bottom:22px;"></div>
-    <div class="section-head"><h2>Группы тренера</h2></div>
-    <table class="dropout-table" style="margin-bottom:18px;">
+    <div class="section-head"><h2>Группы тренера</h2><div class="desc">Клик по группе — её статистика</div></div>
+    <table class="dropout-table" id="trainerGroupsTable" style="margin-bottom:18px;">
       <thead><tr><th>Группа</th><th>Тип</th><th>Старт</th><th>1-й день</th><th>Итог</th><th>Конв.</th><th>Статус</th></tr></thead>
       <tbody>
-        ${[...groups, ...ngTrainer].sort((a,b)=>String(a.startDate||'').localeCompare(String(b.startDate||''))).map(g=>`<tr>
+        ${[...groups, ...ngTrainer].sort((a,b)=>String(a.startDate||'').localeCompare(String(b.startDate||''))).map(g=>`<tr data-gidx="${groupIndexOf(g)}">
           <td>${g.label||'—'}</td>
           <td>${groupTypeOf(g)||'—'}</td>
           <td>${g.startDate||'—'}</td>
@@ -1845,7 +1865,13 @@ function openTrainerDetail(name, opts={}){
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{ticks:{color:'#8E96A3', callback:v=>v+'%'}, grid:{color:'#EDEFF2'}}, x:{ticks:{color:'#8E96A3'}, grid:{display:false}} } }
   });
   el('detailOverlay').classList.add('open');
+  el('detailOverlay').scrollTop = 0;
   el('closeDetail').addEventListener('click', closeDetail);
+  const reopen = extra => openTrainerDetail(name, Object.assign({}, opts, { scopeMonth, skipUrl:true }, extra));
+  el('trainerScopeSelect').addEventListener('change', e=>reopen({ scopeMonth: e.target.value }));
+  document.querySelectorAll('#detailPanel [data-gidx]').forEach(node=>{
+    node.addEventListener('click', ()=>openGroupDetail(Number(node.dataset.gidx), { back: ()=>reopen({}) }));
+  });
   el('copyTrainerLink').addEventListener('click', async ()=>{
     syncUrl({ trainer: name, tab: 'trainers', month: '' });
     try{
@@ -2208,7 +2234,7 @@ function groupNumbersHtml(g){
 function groupCardHtml(g, today){
   const st = groupTodayState(g, today);
   const live = st.kind === 'train' || st.kind === 'line';
-  return `<div class="wk-card ${live ? 'live' : ''} ${st.kind === 'notg' ? 'notg' : ''}" data-trainer="${g.trainer}">
+  return `<div class="wk-card ${live ? 'live' : ''} ${st.kind === 'notg' ? 'notg' : ''}" data-trainer="${g.trainer}" data-gidx="${groupIndexOf(g)}">
     <div class="wk-card-head">
       <div><div class="wk-title">${g.label || 'Группа'}</div><div class="wk-trainer">${trainerNameLabel(g.trainer)}</div>${groupTypeOf(g)?`<div class="wk-type">${groupTypeTag(g)}</div>`:''}</div>
       <span class="wk-status ${st.kind}">${st.text}</span>
@@ -2216,6 +2242,73 @@ function groupCardHtml(g, today){
     ${groupStepsHtml(st, g)}
     ${groupNumbersHtml(g)}
   </div>`;
+}
+
+/** Индекс группы в dashboardData.groups — ключ для открытия карточки группы (у групп нет id). */
+function groupIndexOf(g){ return (dashboardData && dashboardData.groups || []).indexOf(g); }
+
+/** Карточка одной группы: дни, конверсии, отсев. opts.back — вернуться к карточке тренера. */
+function openGroupDetail(gidx, opts={}){
+  const g = (dashboardData.groups || [])[gidx];
+  if(!g) return;
+  const done = groupCompleted(g);
+  const ng = isNotGathered(g);
+  const st = groupTodayState(g, todayIsoLocal());
+  const day1 = Number(g.day1) || 0;
+  const ofDay1 = n => day1 > 0 ? `${round1((Number(n)||0)/day1*100)}% от 1-го дня` : '';
+  const kpi = (label, value, sub='') => `<div class="mini-kpi"><div class="label">${label}</div><div class="value">${value}</div>${sub?`<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${sub}</div>`:''}</div>`;
+  const live = n => Number(n) ? n : '—';
+  const pctV = v => v != null ? `<span class="badge ${pctBadgeClass(v)}">${v}%</span>` : '—';
+  const note = ng ? 'Группа не собралась — людей не было, в цифры не входит.'
+    : g.fellApart ? 'Группа распалась — считается законченной, входит в цифры с меткой «распалась».'
+    : done ? 'Группа закончилась — её цифры входят в итоги недели, месяца и тренера.'
+    : 'Группа ещё в обучении — цифры предварительные, в итоги войдут после даты выхода на линию.';
+
+  el('detailPanel').innerHTML = `
+    <div class="detail-head">
+      <div>
+        ${opts.back ? '<button class="btn" id="groupBack" type="button">← К тренеру</button>' : ''}
+        <h2 style="margin-top:${opts.back?'10px':'0'};">${g.label || 'Группа'}</h2>
+        <div class="wk-trainer" style="font-size:13px;">${trainerNameLabel(g.trainer)} ${groupTypeTag(g)}</div>
+      </div>
+      <div class="detail-actions"><button class="close-btn" id="closeDetail" type="button">✕</button></div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-bottom:6px;">
+      <span class="wk-status ${st.kind}">${st.text}</span>
+      <span style="font-size:13px;color:var(--text-secondary);">старт ${weekdayOf(g.startDate)} ${ddmm(g.startDate)} → линия ${weekdayOf(g.lineDate)} ${ddmm(g.lineDate)}</span>
+    </div>
+    ${groupStepsHtml(st, g)}
+    ${ng ? '' : `
+    <div class="mini-kpi-grid">
+      ${kpi('1-й день', live(g.day1), 'пришли')}
+      ${kpi('2-й день', live(g.day2Start), Number(g.day2Start) ? ofDay1(g.day2Start) : '')}
+      ${kpi('3-й день', live(g.day3Start), Number(g.day3Start) ? ofDay1(g.day3Start) : '')}
+      ${kpi('На линии', done ? g.finalCount : 'идёт', done ? ofDay1(g.finalCount) : `выход ${ddmm(g.lineDate)}`)}
+    </div>
+    <div class="mini-kpi-grid cols-3" style="margin-top:-8px;">
+      ${kpi('Конв. 1→5', done ? pctV(g.conv1to5) : '—', `цель ${metrics().planConv1to5}%`)}
+      ${kpi('Конв. 2→5', done ? pctV(g.conv2) : '—')}
+      ${kpi('Конв. 3→5', done ? pctV(g.conv3) : '—')}
+    </div>
+    <div class="mini-kpi-grid cols-3" style="margin-top:-8px;">
+      ${kpi('Ушли сами', g.leftSelf || 0, ofDay1(g.leftSelf))}
+      ${kpi('Отказали мы', g.refused || 0, ofDay1(g.refused))}
+      ${kpi('Перенесли', g.transferred || 0, ofDay1(g.transferred))}
+    </div>
+    <div class="section-head"><h2>Воронка группы</h2></div>
+    <div class="funnel" id="groupFunnel" style="margin-bottom:16px;"></div>`}
+    <div class="footnote">${note}${g.comment ? ` Комментарий в таблице: «${g.comment}».` : ''}</div>
+  `;
+  if(!ng){
+    const steps = [{label:'1-й день', value: day1}, {label:'2-й день', value: Number(g.day2Start)||0}, {label:'3-й день', value: Number(g.day3Start)||0}];
+    if(done) steps.push({label:'Выход на линию', value: Number(g.finalCount)||0});
+    renderFunnelInto('groupFunnel', steps);
+  }
+  destroyChart('trainerTrendChart');
+  el('detailOverlay').classList.add('open');
+  el('detailOverlay').scrollTop = 0;
+  el('closeDetail').addEventListener('click', closeDetail);
+  if(opts.back) el('groupBack').addEventListener('click', opts.back);
 }
 
 /** Блок «Неделя тренера» в карточке тренера (открытой с вкладки недель): сводка + карточки его групп недели. */
@@ -2241,8 +2334,7 @@ function trainerWeekBlockHtml(name, key){
       <div class="section-head" style="margin-bottom:8px;"><h2>Неделя ${weekLabel(key, true)}</h2><div class="desc">${weekTypeFilter?`тип «${weekTypeFilter}» · `:''}группы тренера на этой неделе</div></div>
       <div style="font-size:var(--fs-body);">${parts.length ? (s => s.charAt(0).toUpperCase() + s.slice(1))(parts.join(' · ')) : 'На этой неделе у тренера групп нет.'}</div>
       ${groups.length ? `<div class="wk-groups" style="margin-top:12px;">${groups.map(g=>groupCardHtml(g, today)).join('')}</div>` : ''}
-    </div>
-    <div class="section-head" style="margin-bottom:10px;"><h2>Весь период</h2><div class="desc">Общий обзор тренера по всем месяцам</div></div>`;
+    </div>`;
 }
 
 /** «на прошлой неделе (09.11–15.11)» или «раньше (на неделях 02.11–08.11, 09.11–15.11)». */
