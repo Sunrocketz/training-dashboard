@@ -226,6 +226,9 @@
   .wk-status.fell, .wk-status.notg{background:var(--danger-soft); color:var(--danger);}
   .wk-card.notg{opacity:.75; background:var(--surface-2);}
   .wk-type{margin-top:6px;}
+  #detailPanel .wk-card{cursor:default;}
+  #detailPanel .wk-card:hover{border-color:var(--border);}
+  #detailPanel .wk-card.live:hover{border-color:#C9D2FB;}
   .wk-status.soon, .wk-status.weekend{background:var(--warning-soft); color:var(--warning);}
   .wk-steps{display:flex; gap:4px; margin:12px 0 4px;}
   .wk-step{flex:1; height:8px; border-radius:4px; background:var(--surface-3);}
@@ -1725,14 +1728,19 @@ function renderTrainerLineReviewBlock(trainer){
   </div>`;
 }
 
+/**
+ * opts.weekKey — открыто с вкладки недель: сверху блок недели тренера.
+ * opts.fullPeriod — общий обзор за весь период (фильтр месяца на вкладке недель скрыт и не должен действовать).
+ */
 function openTrainerDetail(name, opts={}){
-  const data = viewData;
+  const scopeMonth = opts.fullPeriod ? '' : periodMonth;
+  const data = opts.fullPeriod ? buildViewData(dashboardData, '') : viewData;
   const trainer = rankedTrainers(data.byTrainer, data.totals).find(t=>t.name===name)
     || withTrainerScore(data.byTrainer.find(t=>t.name===name) || {}, scoreContextFromTotals(data.totals));
   if(!trainer || !trainer.name) return;
   const groups = validGroupsOf(data.groups).filter(g=>g.trainer===name);
   const ngTrainer = notGatheredGroupsOf(dashboardData.groups)
-    .filter(g=>g.trainer===name && (!periodMonth || g.month===periodMonth));
+    .filter(g=>g.trainer===name && (!scopeMonth || g.month===scopeMonth));
   const overallConv = data.totals.conv1to5;
   const tw = trainerConv(trainer);
   const diff = tw!==null ? round1(tw-overallConv) : null;
@@ -1764,6 +1772,7 @@ function openTrainerDetail(name, opts={}){
         <button class="close-btn" id="closeDetail" type="button">✕</button>
       </div>
     </div>
+    ${opts.weekKey ? trainerWeekBlockHtml(name, opts.weekKey) : ''}
     <div class="mini-kpi-grid">
       <div class="mini-kpi"><div class="label">Место / TQI v3</div><div class="value">${trainer.rank!=null?trainer.rank:'—'} · ${trainer.score!=null?trainer.score:'—'}</div>
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${trainer.rankEligible?'в рейтинге':'мало данных для места'}</div>
@@ -1797,7 +1806,7 @@ function openTrainerDetail(name, opts={}){
       <div class="mini-kpi"><div class="label">Конв. 3→5</div><div class="value">${trainer.conv3!=null?trainer.conv3+'%':'—'}</div></div>
     </div>
     ${renderTrainerLineReviewBlock(trainer)}
-    <div class="footnote" style="margin:-2px 0 14px;">Область: ${periodMonth?`месяц «${periodMonth}»`:'весь период'}. Воронка и конверсии — законченные группы. Оценка после линии — весь журнал ОС. «В обучении» видны в списке, но не в цифрах результата.</div>
+    <div class="footnote" style="margin:-2px 0 14px;">Область: ${scopeMonth?`месяц «${scopeMonth}»`:'весь период'}. Воронка и конверсии — законченные группы. Оценка после линии — весь журнал ОС. «В обучении» видны в списке, но не в цифрах результата.</div>
     <div class="section-head"><h2>Воронка тренера</h2></div>
     <div class="funnel" id="trainerFunnel" style="margin-bottom:22px;"></div>
     <div class="section-head"><h2>Группы тренера</h2></div>
@@ -2209,6 +2218,33 @@ function groupCardHtml(g, today){
   </div>`;
 }
 
+/** Блок «Неделя тренера» в карточке тренера (открытой с вкладки недель): сводка + карточки его групп недели. */
+function trainerWeekBlockHtml(name, key){
+  const idx = buildWeeksIndex(weekScopedGroups());
+  const w = idx.map[key];
+  if(!w) return '';
+  const today = todayIsoLocal();
+  const mine = g => g.trainer === name;
+  const byStart = (a,b)=>String(a.startDate||'').localeCompare(String(b.startDate||''));
+  const groups = [...w.starts.filter(mine), ...w.lines.filter(g=>mine(g) && weekKeyOf(g.startDate)!==key)].sort(byStart);
+  const t = weekTrainerRows(w).find(x=>x.name===name);
+  const parts = [];
+  if(t){
+    if(t.starts) parts.push(`${plural(t.starts,'стартовала','стартовали','стартовали')} ${t.starts} ${plural(t.starts,'группа','группы','групп')}`);
+    if(t.notGathered) parts.push(`не собралось ${t.notGathered}`);
+    if(t.outcomeGroups) parts.push(`вышли на линию ${t.finalCount} из ${t.day1} (${t.outcomeGroups} гр.)${t.conv!=null?` — ${t.conv}%`:''}`);
+    else parts.push('на линию на этой неделе пока никто не вышел');
+    if(t.pending) parts.push(`ждут выхода ${t.pending} гр.`);
+    if(t.progGroups) parts.push(`в обучении ${t.progGroups} гр.`);
+  }
+  return `<div class="section" style="margin:0 0 18px;padding:14px 16px;">
+      <div class="section-head" style="margin-bottom:8px;"><h2>Неделя ${weekLabel(key, true)}</h2><div class="desc">${weekTypeFilter?`тип «${weekTypeFilter}» · `:''}группы тренера на этой неделе</div></div>
+      <div style="font-size:var(--fs-body);">${parts.length ? (s => s.charAt(0).toUpperCase() + s.slice(1))(parts.join(' · ')) : 'На этой неделе у тренера групп нет.'}</div>
+      ${groups.length ? `<div class="wk-groups" style="margin-top:12px;">${groups.map(g=>groupCardHtml(g, today)).join('')}</div>` : ''}
+    </div>
+    <div class="section-head" style="margin-bottom:10px;"><h2>Весь период</h2><div class="desc">Общий обзор тренера по всем месяцам</div></div>`;
+}
+
 /** «на прошлой неделе (09.11–15.11)» или «раньше (на неделях 02.11–08.11, 09.11–15.11)». */
 function carriedWeeksText(carried, prevKey){
   const keys = [...new Set(carried.map(g=>weekKeyOf(g.startDate)).filter(Boolean))].sort();
@@ -2478,7 +2514,7 @@ function renderWeeksTab(){
     }
   });
   document.querySelectorAll('#panel-weeks .wk-card[data-trainer], #weekGroupsTable tr[data-trainer], #weekTrainersTable tr[data-trainer]').forEach(node=>{
-    node.addEventListener('click', ()=>openTrainerDetail(node.dataset.trainer));
+    node.addEventListener('click', ()=>openTrainerDetail(node.dataset.trainer, { weekKey:key, fullPeriod:true, skipUrl:true }));
   });
   document.querySelectorAll('#weekListTable tr[data-week]').forEach(tr=>{
     tr.addEventListener('click', ()=>go(tr.dataset.week));
