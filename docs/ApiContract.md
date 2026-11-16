@@ -5,8 +5,8 @@
 - Endpoint: `GET {WEB_APP_URL}/exec`
 - Content-Type: `application/json`
 - Auth: нет (публичный URL)
-- **schemaVersion:** `7` (текущий)
-- Кэш: Script Cache на 300с (`dashboard_json_v7`); `?refresh=1` принудительно пересчитывает
+- **schemaVersion:** `8` (текущий)
+- Кэш: Script Cache на 300с (`dashboard_json_v8`); `?refresh=1` принудительно пересчитывает
 - В ответе опционально `cache: { hit: boolean, ttlSec: number }`
 
 Текущий deployment ID (URL `/exec`):  
@@ -16,7 +16,7 @@
 
 ```ts
 type DashboardPayload = {
-  schemaVersion: number;      // сейчас 7
+  schemaVersion: number;      // сейчас 8
   updatedAt: string;
   metrics: MetricsMeta;
   totals: Totals;
@@ -53,7 +53,7 @@ type DashboardPayload = {
 | `groups` | number | **старт групп**: все valid, включая ещё в обучении |
 | `groupsCompleted` / `groupsInProgress` | number | законченные / ещё в обучении |
 | `day1`…`finalCount`, отсев | number | только законченные группы |
-| `notGathered` / `fellApart*` | number | не собралась / распалась (распалась = законченная) |
+| `notGathered` / `fellApart*` | number | не собралась (вкл. «не набралась») / распалась (вкл. «расформирована»; распалась = законченная) — ADR-021 |
 | `conv1to5` | number | взвешенная 1→5 по законченным |
 | `leftSelfRate` / `refuseRate` / `transferRate` | number | % от day1 законченных |
 | `yieldPerGroup` | number | `finalCount / groupsCompleted` |
@@ -66,6 +66,7 @@ type DashboardPayload = {
 |------|-----|-------|
 | `groups` | number | старты тренера (вкл. в обучении) |
 | `groupsCompleted` / `groupsInProgress` | number | законченные / в обучении |
+| `notGathered` | number | «не собралась» у тренера (в старты и TQI не входит); тренер только с такими группами в `byTrainer` не появляется |
 | day1 / final / отсев / конверсии | | только законченные |
 | `leftRate` / `refuseRate` / `transferRate` | number \| null | % от day1 законченных |
 | `fellShare` | number | % распавшихся от **законченных** |
@@ -116,19 +117,22 @@ UI при фильтре месяца пересчитывает воронку 
 
 ## `byMonth[]`
 
-Как totals: `groups` = старты месяца; `groupsCompleted` / `groupsInProgress`; day1/final/отсев/conv — только законченные.
+Как totals: `groups` = старты месяца; `groupsCompleted` / `groupsInProgress`; `notGathered` — не собралось в месяце (v8); day1/final/отсев/conv — только законченные.
 
 ## `groups[]`
 
 | Поле | Тип | Смысл |
 |------|-----|-------|
-| `startDate` / `lineDate` | string \| null | `yyyy-MM-dd`, таймзона скрипта |
+| `startDate` / `lineDate` | string \| null | `yyyy-MM-dd`, таймзона скрипта; UI строит по ним вкладку недель (ADR-020) — формат не менять |
 | `completed` | boolean | `lineDate ≤ сегодня` **или** `fellApart` |
-| `fellApart` | boolean | комментарий содержит «распалась» |
+| `fellApart` | boolean | комментарий содержит «распалась» или «расформирована» |
+| `notGathered` | boolean | v8: «не собралась» / «не набралась» — **не** valid: в суммы, старты, воронку, TQI не входит; UI показывает только счётчиком и карточкой |
+| `comment` | string | v8: колонка R как есть (тип группы: «1-ый уровень», «Force Group», «Сервисная»… или статус); ≤120 символов |
 | day1 / final / conv* | | сырые цифры строки (для действующих в агрегаты не идут) |
 
 ## Совместимость
 
+- v8: `groups[]` содержит и «не собралась» (`notGathered: true`, `completed: false`) — UI обязан исключать их из всех сумм; `groups[].comment` (колонка R как есть, ≤120 симв.); `byMonth[].notGathered`, `byTrainer[].notGathered`; синонимы статусов; кэш `dashboard_json_v8` (ADR-021). Порядок выката: сначала UI (терпит v7 и v8), потом GAS — старый UI посчитал бы «не собралась» как группы в обучении.
 - v7: TQI v3 (балл 1–5 5% + навыки да/нет 5%); кэш `dashboard_json_v7d` (метка «Уволен», ADR-019).
 - v6: `lineReview` у totals/byTrainer + `metrics.lineReview`; кэш `dashboard_json_v6`. TQI без изменений.
 - v5: outcome-метрики только по законченным группам; новые поля `completed`, `lineDate`, `groupsCompleted`, `groupsInProgress`; ключ кэша `dashboard_json_v5`.

@@ -27,10 +27,11 @@ training-dashboard/
 | Auto-refresh | Расписание 08:00 МСК | Менять данные на сервере |
 | Overview tab | Баннер периода, KPI+MoM, блок «Оценка после линии», воронка, отсев, тренд, топы | Ломать взвешенную/среднюю формулы без ApiContract |
 | Toolbar | Фильтр месяца, легенда порогов | Серверная фильтрация (её нет) |
-| Deep-link | `?period=&trainer=&month=&tab=` + кнопка «Ссылка» | Ломать shareable URL без docs |
+| Deep-link | `?period=&trainer=&month=&tab=&week=` + кнопка «Ссылка» | Ломать shareable URL без docs |
 | CSV export | Кнопка выгрузки активной вкладки | Серверный экспорт |
 | Trainers tab | Таблица, сортировка, поиск, detail | Писать в Sheets |
 | Months tab | Карточки месяцев, detail | Менять контракт |
+| Weeks tab | Выбор недели (пн–вс); «Коротко о неделе»; карточки групп со статусом «сегодня» (N-й день / выход / старт скоро); 4 главные цифры к прошлой неделе; в раскрывающемся блоке — воронка (законченные + идущие), таблицы групп и тренеров, тренд 12 нед., список недель (ADR-020) | Считать TQI по неделе; применять фильтр месяца |
 | Charts | Chart.js lifecycle (`destroyChart`) | Утекать инстансы чартов |
 | Styles | Визуал дашборда | Тянуть тяжёлый UI-kit без ADR |
 
@@ -39,6 +40,8 @@ training-dashboard/
 - `fetchData`, `buildViewData`, `aggregateFromGroups`, `momContext`
 - `renderAll` / `renderOverview` / `renderLineReviewSection` / `renderTrainersTab` / `renderMonthsTab`
 - `openTrainerDetail` / `openMonthDetail` — сводки из `groups` + отсев + `lineReview`
+- `validGroupsOf` / `notGatheredGroupsOf` / `isNotGathered` — v8: «не собралась» в `groups[]` только для показа (ADR-021); `groupTypeOf` / `groupTypeTag` — тип группы из комментария
+- `buildWeeksIndex` / `summarizeWeek` / `weekTrainerRows` / `renderWeeksTab` / `groupTodayState` / `groupCardHtml` / `weekBriefHtml` / `renderWeekFunnel` / `renderWeekTrendChart` — недели из `groups` (старт по `startDate`, итог по `lineDate`)
 
 ## Apps Script (`apps-script/Код.js`)
 
@@ -48,7 +51,7 @@ training-dashboard/
 | Collect | `collectDashboardData`, `collectLineReviewPack` | Сначала журнал ОС, затем TQI v3 + payload |
 | Sheet UI | `buildDashboard`, `onOpen` | Лист «Дашборд» |
 | HTTP | `doGet` | JSON response |
-| Utils | `normalizeName`, `foldYo`, `trainerMatchKey`, `isDepartedTrainer`, `parseScore15`, `parseYesNo`, `parsePercent`, `sumColumn`, `round1` | Нормализация |
+| Utils | `groupStatusFromComment`, `normalizeName`, `foldYo`, `trainerMatchKey`, `isDepartedTrainer`, `parseScore15`, `parseYesNo`, `parsePercent`, `sumColumn`, `round1` | Нормализация |
 
 ## Внешние модули (не в git)
 

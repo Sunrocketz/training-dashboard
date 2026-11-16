@@ -37,7 +37,8 @@ var DASHBOARD_SHEET_NAME = 'Дашборд';               // название �
 var DATA_START_ROW = 1;   // с какой строки начинать чтение
 var DATA_END_ROW = 500;   // до какой строки читать (с запасом)
 var LAST_COLUMN = 'R';    // последняя колонка с данными
-var API_CACHE_KEY = 'dashboard_json_v7d';
+var API_CACHE_KEY = 'dashboard_json_v8';
+var COMMENT_MAX_LEN = 120; // колонка R в groups[].comment — обрезаем на всякий случай
 var API_CACHE_TTL_SEC = 300; // 5 минут — повторные открытия дашборда без пересчёта листа
 
 // Журнал «Выход на линию — ОС» (другая книга). Нужен доступ «Читатель» у аккаунта деплоера.
@@ -87,10 +88,12 @@ function collectDashboardData() {
   var range = sourceSheet.getRange('A' + DATA_START_ROW + ':' + LAST_COLUMN + endRow);
   var values = range.getValues();
 
-  // validEntry = { row, fellApart, completed }; «не собралась» исключаем, «распалась» — в valid с меткой
+  // validEntry = { row, fellApart, completed }; «не собралась» — вне расчёта (но в groups[] с меткой), «распалась» — в valid с меткой
   var tz = Session.getScriptTimeZone();
   var todayKey = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
   var validGroups = [];
+  var notGatheredGroups = [];
+  var allEntries = []; // порядок строк листа: valid + «не собралась» — для groups[]
   var notGathered = 0;
   var fellApart = 0;
 
@@ -99,18 +102,23 @@ function collectDashboardData() {
     var startDate = row[COL.startDate];
     if (!(startDate instanceof Date)) continue;
 
-    var comment = String(row[COL.comment] || '').toLowerCase();
-    if (comment.indexOf('не собралась') !== -1) {
+    var status = groupStatusFromComment(row[COL.comment]);
+    if (status.notGathered) {
       notGathered++;
+      var ngEntry = { row: row, notGathered: true, fellApart: false, completed: false };
+      notGatheredGroups.push(ngEntry);
+      allEntries.push(ngEntry);
       continue;
     }
-    var isFellApart = comment.indexOf('распалась') !== -1;
-    if (isFellApart) fellApart++;
-    validGroups.push({
+    if (status.fellApart) fellApart++;
+    var entry = {
       row: row,
-      fellApart: isFellApart,
-      completed: isFellApart || isLineDateReached(row[COL.lineDate], todayKey, tz)
-    });
+      notGathered: false,
+      fellApart: status.fellApart,
+      completed: status.fellApart || isLineDateReached(row[COL.lineDate], todayKey, tz)
+    };
+    validGroups.push(entry);
+    allEntries.push(entry);
   }
 
   var completedGroups = validGroups.filter(function(e) { return e.completed; });
@@ -155,6 +163,13 @@ function collectDashboardData() {
     if (c3 !== null) { t.conv3Sum += c3; t.conv3Count += 1; }
   });
 
+  // «не собралась» у тренера: только счётчик, в старты/TQI не входит (ADR-021).
+  // Тренер, у которого есть только несобравшиеся группы, в byTrainer не появляется — его видно в groups[].
+  notGatheredGroups.forEach(function(entry) {
+    var t = byTrainer[normalizeName(entry.row[COL.trainer])];
+    if (t) t.notGathered = (t.notGathered || 0) + 1;
+  });
+
   var trainerList = Object.keys(byTrainer).sort().map(function(name) {
     var t = byTrainer[name];
     return {
@@ -162,6 +177,7 @@ function collectDashboardData() {
       groups: t.groups,
       groupsCompleted: t.groupsCompleted,
       groupsInProgress: t.groupsInProgress,
+      notGathered: t.notGathered || 0,
       fellApart: t.fellApart,
       day1: t.day1Total,
       leftSelf: t.leftSelf,
@@ -181,18 +197,23 @@ function collectDashboardData() {
   // ---- по месяцам (для тренда + отсев) ----
   var byMonth = {};
   var monthOrder = [];
-  validGroups.forEach(function(entry) {
+  // обходим в порядке листа, чтобы месяц с одними «не собралась» тоже встал на своё место
+  allEntries.forEach(function(entry) {
     var row = entry.row;
     var label = String(row[COL.monthGroup] || '');
     var month = label.split(',')[0].trim() || 'Без месяца';
     if (!byMonth[month]) {
       byMonth[month] = {
-        month: month, groups: 0, groupsCompleted: 0, groupsInProgress: 0,
+        month: month, groups: 0, groupsCompleted: 0, groupsInProgress: 0, notGathered: 0,
         fellApart: 0, day1Total: 0, finalCount: 0,
         leftSelf: 0, refused: 0, transferred: 0,
         fellApartDay1: 0, fellApartFinal: 0
       };
       monthOrder.push(month);
+    }
+    if (entry.notGathered) {
+      byMonth[month].notGathered += 1;
+      return;
     }
     byMonth[month].groups += 1;
     if (!entry.completed) {
@@ -218,6 +239,7 @@ function collectDashboardData() {
       groups: d.groups,
       groupsCompleted: d.groupsCompleted,
       groupsInProgress: d.groupsInProgress,
+      notGathered: d.notGathered,
       fellApart: d.fellApart,
       day1: d.day1Total,
       finalCount: d.finalCount,
@@ -229,7 +251,7 @@ function collectDashboardData() {
     };
   });
 
-  var groupList = validGroups.map(function(entry) {
+  var groupList = allEntries.map(function(entry) {
     var row = entry.row;
     var label = String(row[COL.monthGroup] || '');
     var month = label.split(',')[0].trim() || 'Без месяца';
@@ -241,6 +263,9 @@ function collectDashboardData() {
       lineDate: formatSheetDate(row[COL.lineDate], tz),
       completed: !!entry.completed,
       fellApart: !!entry.fellApart,
+      notGathered: !!entry.notGathered,
+      // колонка R как есть (тип/статус группы); по решению владельца выводится в UI (ADR-021, Security)
+      comment: String(row[COL.comment] || '').trim().slice(0, COMMENT_MAX_LEN),
       day1: Number(row[COL.day1]) || 0,
       leftSelf: Number(row[COL.leftSelf]) || 0,
       refused: Number(row[COL.refused]) || 0,
@@ -304,7 +329,7 @@ function collectDashboardData() {
   trainerList = assignTrainerRanks(trainerList, metricsMeta);
 
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
     updatedAt: Utilities.formatDate(new Date(), tz, "yyyy-MM-dd'T'HH:mm:ss"),
     metrics: metricsMeta,
     totals: {
@@ -484,6 +509,20 @@ function doGet(e) {
 }
 
 // ======== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ========
+/**
+ * Статус группы по колонке R (регистр не важен). Синонимы (ADR-021):
+ *  «не собралась» / «не набралась» → вне расчёта;
+ *  «распалась» / «расформирована» → в valid с меткой fellApart.
+ * Всё остальное («1-ый уровень», «Force Group», «Сервисная») — тип группы, на расчёт не влияет.
+ */
+function groupStatusFromComment(value) {
+  var c = String(value || '').toLowerCase().replace(/ё/g, 'е');
+  return {
+    notGathered: /не\s*(собрал|набрал)/.test(c),
+    fellApart: /(распал|расформир)/.test(c)
+  };
+}
+
 function normalizeName(value) {
   var name = String(value || 'Без имени');
   name = name.trim().replace(/\s+/g, ' ');

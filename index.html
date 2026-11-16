@@ -179,6 +179,80 @@
   .badge.warning{background:var(--warning-soft); color:var(--warning);}
   .badge.danger{background:var(--danger-soft); color:var(--danger);}
   .badge.neutral{background:var(--surface-3); color:var(--text-secondary);}
+  .badge.accent{background:var(--accent-soft); color:var(--accent-dark);}
+
+  /* ---- недели ---- */
+  /* навигация недели — отдельной строкой под текстом баннера, чтобы список не сжимался */
+  .week-nav{display:flex; flex-wrap:wrap; gap:8px; align-items:center; flex:1 1 100%; max-width:100%; min-width:0;}
+  .week-nav select{
+    background:var(--surface); border:1px solid var(--border); border-radius:8px;
+    color:var(--text-primary); font-size:13px; padding:8px 12px; flex:0 1 auto; width:auto; min-width:0; max-width:100%;
+  }
+  .week-nav select:focus{outline:none; border-color:var(--accent);}
+  .week-nav .btn:disabled{opacity:.4; cursor:default;}
+  tr.is-selected td{background:var(--accent-soft);}
+  .funnel-fill.progress{
+    background:repeating-linear-gradient(135deg, var(--accent-soft) 0 6px, #DDE3FD 6px 12px);
+    justify-content:center; padding-right:0;
+  }
+  .funnel-fill.progress span{color:var(--accent-dark);}
+  .legend-swatch{display:inline-block; width:10px; height:10px; border-radius:2px; vertical-align:-1px; margin-right:4px;}
+  .legend-swatch.done{background:var(--accent);}
+  .legend-swatch.progress{background:repeating-linear-gradient(135deg, var(--accent-soft) 0 3px, #C9D2FB 3px 6px); border:1px solid #C9D2FB;}
+  .muted-num{color:var(--text-muted);}
+
+  /* карточки групп недели — простой вид для неспециалистов */
+  .kpi-grid.kpi-4{grid-template-columns:repeat(4, 1fr);}
+  .wk-brief{list-style:none; display:flex; flex-direction:column; gap:8px; font-size:var(--fs-body); line-height:1.5; color:var(--text-primary);}
+  .wk-brief li{padding-left:16px; position:relative;}
+  .wk-brief li::before{content:''; position:absolute; left:2px; top:9px; width:6px; height:6px; border-radius:50%; background:var(--accent);}
+  .wk-groups{display:grid; grid-template-columns:repeat(auto-fill, minmax(290px, 1fr)); gap:12px;}
+  .wk-card{
+    border:1px solid var(--border); border-radius:12px; padding:14px 16px; background:var(--surface);
+    cursor:pointer; transition:border-color .15s, box-shadow .15s;
+  }
+  .wk-card:hover{border-color:var(--accent);}
+  .wk-card.live{border-color:#C9D2FB; box-shadow:0 0 0 3px var(--accent-soft);}
+  .wk-card-head{display:flex; justify-content:space-between; align-items:flex-start; gap:10px;}
+  .wk-title{font-family:var(--font-display); font-size:15px; font-weight:700; line-height:1.25;}
+  .wk-trainer{font-size:var(--fs-meta); color:var(--text-secondary); margin-top:2px;}
+  .wk-status{
+    flex-shrink:0; font-size:12px; font-weight:600; padding:4px 10px; border-radius:100px;
+    background:var(--surface-3); color:var(--text-secondary); text-align:right; max-width:55%;
+  }
+  .wk-status.train{background:var(--accent-soft); color:var(--accent-dark);}
+  .wk-status.line{background:var(--success); color:#fff;}
+  .wk-status.done{background:var(--success-soft); color:var(--success);}
+  .wk-status.fell, .wk-status.notg{background:var(--danger-soft); color:var(--danger);}
+  .wk-card.notg{opacity:.75; background:var(--surface-2);}
+  .wk-type{margin-top:6px;}
+  .wk-status.soon, .wk-status.weekend{background:var(--warning-soft); color:var(--warning);}
+  .wk-steps{display:flex; gap:4px; margin:12px 0 4px;}
+  .wk-step{flex:1; height:8px; border-radius:4px; background:var(--surface-3);}
+  .wk-step.done{background:var(--accent);}
+  .wk-step.now{background:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);}
+  .wk-step.fell{background:var(--danger-soft);}
+  .wk-step-line{flex:0 0 22%; background:var(--success-soft);}
+  .wk-step-line.line-done{background:var(--success);}
+  .wk-step-line.line-now{background:var(--success); box-shadow:0 0 0 3px var(--success-soft);}
+  .wk-steps-cap{display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted); margin-bottom:10px;}
+  .wk-nums{font-size:13px; color:var(--text-secondary); display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px;}
+  .wk-nums b{font-family:var(--font-mono); color:var(--text-primary);}
+  .wk-sep{color:var(--text-muted);}
+  .wk-drop{font-size:12px; color:var(--text-muted); margin-top:6px;}
+  .wk-more{margin-top:4px;}
+  .wk-more > summary{
+    cursor:pointer; list-style:none; font-size:13px; font-weight:600; color:var(--accent-dark);
+    background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 18px; margin-bottom:16px;
+  }
+  .wk-more > summary::-webkit-details-marker{display:none;}
+  .wk-more > summary::before{content:'▸ '; }
+  .wk-more[open] > summary::before{content:'▾ ';}
+  @media (max-width:900px){ .kpi-grid.kpi-4{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:600px){
+    .week-nav select{flex-basis:100%; order:-1;}
+    .week-nav select.wk-type-select{order:0;}
+  }
 
   .placeholder{display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px 20px; color:var(--text-muted); text-align:center; gap:10px;}
   .placeholder .big{font-size:15px; color:var(--text-secondary);}
@@ -263,7 +337,7 @@
   <header>
     <div class="title-block">
       <h1>Контроль штата обучения</h1>
-      <p>Воронка конверсии, отсев и результаты по тренерам и месяцам</p>
+      <p>Воронка конверсии, отсев и результаты по тренерам, месяцам и неделям</p>
     </div>
     <div class="status-block">
       <div class="status-pill">
@@ -290,6 +364,7 @@
     <button class="tab-btn active" data-tab="overview">Обзор</button>
     <button class="tab-btn" data-tab="trainers">По тренерам</button>
     <button class="tab-btn" data-tab="months">По месяцам</button>
+    <button class="tab-btn" data-tab="weeks">По неделям</button>
   </div>
 
   <div class="toolbar" id="toolbar" style="display:none;">
@@ -322,12 +397,16 @@ const LOCAL_CACHE_KEY = 'trainingDashboard:lastPayload:v6';
 let dashboardData = null;
 let viewData = null;
 let periodMonth = '';
+let periodWeek = ''; // понедельник выбранной недели (yyyy-MM-dd); '' = текущая
+let weekDetailsOpen = false; // раскрыт ли блок «Подробная аналитика недели»
+let weekTypeFilter = '';     // фильтр по типу группы (колонка R) на вкладке недель; '' = все
 let refreshTimeout = null, refreshInterval = null;
 let trainerSortState = { key: 'rank', dir: 'asc' };
 let tabsInited = false;
 let pendingDeepLink = null;
 let deepLinkApplied = false;
 const DAY_MS = 24*60*60*1000;
+const WEEK_TREND_LEN = 12; // сколько недель в тренде вкладки «По неделям»
 const el = (id) => document.getElementById(id);
 let charts = {};
 
@@ -355,6 +434,20 @@ function groupCompleted(g){
   return true;
 }
 function outcomeGroupsOf(groups){ return (groups||[]).filter(groupCompleted); }
+// schema v8: в groups[] есть и «не собралась» (notGathered: true) — в расчёты не идут, только счётчик (ADR-021)
+function isNotGathered(g){ return !!(g && g.notGathered); }
+function validGroupsOf(groups){ return (groups||[]).filter(g=>!isNotGathered(g)); }
+function notGatheredGroupsOf(groups){ return (groups||[]).filter(isNotGathered); }
+const GROUP_STATUS_RE = /не\s*(собрал|набрал)|распал|расформир/i;
+/** Тип группы из колонки R («1-ый уровень», «Force Group», «Сервисная»…). Статусные фразы — не тип, их показывает статус. */
+function groupTypeOf(g){
+  const c = String((g && g.comment) || '').trim();
+  return c && !GROUP_STATUS_RE.test(c) ? c : '';
+}
+function groupTypeTag(g){
+  const t = groupTypeOf(g);
+  return t ? `<span class="badge neutral" title="Комментарий из таблицы">${t}</span>` : '';
+}
 function outcomeGroupCount(t){
   if(t && t.groupsCompleted != null) return Number(t.groupsCompleted) || 0;
   return Number(t && t.groups) || 0;
@@ -364,6 +457,7 @@ function groupsInProgressCount(t){
   return Math.max(0, (Number(t && t.groups) || 0) - outcomeGroupCount(t));
 }
 function groupStatusBadge(g){
+  if(isNotGathered(g)) return '<span class="badge danger">не собралась</span>';
   if(g && g.fellApart) return '<span class="badge neutral">распалась</span>';
   if(!groupCompleted(g)) return '<span class="badge warning">в обучении</span>';
   return '<span class="badge success">ok</span>';
@@ -653,7 +747,8 @@ function renderBadgeLegend(){
   `;
 }
 
-function aggregateFromGroups(groups, raw){
+/** groups — только valid; ngGroups — «не собралась» той же области (только счётчики). */
+function aggregateFromGroups(groups, raw, ngGroups=[]){
   const completed = outcomeGroupsOf(groups);
   const groupsInProgress = Math.max(0, groups.length - completed.length);
   const day1 = sumField(completed,'day1');
@@ -691,9 +786,11 @@ function aggregateFromGroups(groups, raw){
     if(g.conv2!==null && g.conv2!==undefined){ t.conv2Sum += g.conv2; t.conv2Count += 1; }
     if(g.conv3!==null && g.conv3!==undefined){ t.conv3Sum += g.conv3; t.conv3Count += 1; }
   });
+  // как в GAS: счётчик «не собралась» только у тренеров, у которых есть valid-группы в области
+  ngGroups.forEach(g=>{ const t = byTrainerMap[g.trainer]; if(t) t.notGathered = (t.notGathered||0) + 1; });
   const byTrainerRaw = Object.values(byTrainerMap).map(t=>({
     name:t.name, groups:t.groups, groupsCompleted:t.groupsCompleted, groupsInProgress:t.groupsInProgress,
-    fellApart:t.fellApart, day1:t.day1, leftSelf:t.leftSelf, refused:t.refused,
+    notGathered:t.notGathered||0, fellApart:t.fellApart, day1:t.day1, leftSelf:t.leftSelf, refused:t.refused,
     transferred:t.transferred, finalCount:t.finalCount,
     conv1to5: t.groupsCompleted>0 ? round1(t.conv1to5Sum/t.groupsCompleted) : null,
     conv1to5Weighted: t.day1>0 ? round1(t.finalCount/t.day1*100) : null,
@@ -705,15 +802,16 @@ function aggregateFromGroups(groups, raw){
 
   const monthOrder = [];
   const byMonthMap = {};
-  groups.forEach(g=>{
+  [...groups, ...ngGroups].forEach(g=>{
     if(!byMonthMap[g.month]){
       byMonthMap[g.month] = {
-        month:g.month, groups:0, groupsCompleted:0, groupsInProgress:0, fellApart:0,
+        month:g.month, groups:0, groupsCompleted:0, groupsInProgress:0, notGathered:0, fellApart:0,
         day1:0, finalCount:0, leftSelf:0, refused:0, transferred:0, fellApartDay1:0, fellApartFinal:0
       };
       monthOrder.push(g.month);
     }
     const m = byMonthMap[g.month];
+    if(isNotGathered(g)){ m.notGathered += 1; return; }
     m.groups += 1;
     if(!groupCompleted(g)){ m.groupsInProgress += 1; return; }
     m.groupsCompleted += 1;
@@ -734,7 +832,7 @@ function aggregateFromGroups(groups, raw){
     groups: groups.length,
     groupsCompleted: completed.length,
     groupsInProgress,
-    notGathered: null,
+    notGathered: ngGroups.length,
     fellApart,
     fellApartDay1,
     fellApartFinalCount,
@@ -789,6 +887,7 @@ function buildViewData(raw, month){
     }));
     return Object.assign({}, raw, {
       periodFiltered: false,
+      groups: validGroupsOf(raw.groups),
       allByMonth: raw.byMonth || [],
       totals,
       byTrainer: rankedTrainers(byTrainerBase, totals),
@@ -803,8 +902,8 @@ function buildViewData(raw, month){
       }))
     });
   }
-  const groups = (raw.groups||[]).filter(g=>g.month===month);
-  return aggregateFromGroups(groups, raw);
+  const inMonth = (raw.groups||[]).filter(g=>g.month===month);
+  return aggregateFromGroups(validGroupsOf(inMonth), raw, notGatheredGroupsOf(inMonth));
 }
 
 function momContext(raw, month){
@@ -881,6 +980,7 @@ function readDeepLinkFromUrl(){
     period: p.get('period') || '',
     trainer: p.get('trainer') || '',
     month: p.get('month') || '',
+    week: p.get('week') || '',
     tab: p.get('tab') || ''
   };
 }
@@ -894,6 +994,8 @@ function syncUrl(extra={}){
   if(tab && tab !== 'overview') p.set('tab', tab);
   if(extra.trainer) p.set('trainer', extra.trainer);
   if(extra.month) p.set('month', extra.month);
+  const week = extra.week !== undefined ? extra.week : (tab === 'weeks' ? periodWeek : '');
+  if(week && tab === 'weeks') p.set('week', week);
   const qs = p.toString();
   const next = qs ? `${location.pathname}?${qs}` : location.pathname;
   history.replaceState(null, '', next);
@@ -934,12 +1036,12 @@ function exportActiveTabCsv(){
   const tab = document.querySelector('.tab-btn.active')?.dataset.tab || 'overview';
   const stamp = new Date().toISOString().slice(0,10);
   if(tab === 'trainers'){
-    const rows = [['Место','Тренер','Уволен','TQI v3','Групп','Закончились','В обучении','Day1','Итог','Выход/гр','Вклад %','Распалось','Ушли %','Конв 1→5','Конв 2→5','Конв 3→5','ОС оценка','ОС оценок','Скрипт %','Возражения %','CRM %','Качество','Линия','Оценка кандидатов','Надёжность','ВкладЧасть','YieldЧасть','Стабильность']];
+    const rows = [['Место','Тренер','Уволен','TQI v3','Групп','Закончились','В обучении','Не собралось','Day1','Итог','Выход/гр','Вклад %','Распалось','Ушли %','Конв 1→5','Конв 2→5','Конв 3→5','ОС оценка','ОС оценок','Скрипт %','Возражения %','CRM %','Качество','Линия','Оценка кандидатов','Надёжность','ВкладЧасть','YieldЧасть','Стабильность']];
     rankedTrainers(viewData.byTrainer, viewData.totals).forEach(t=>{
       const p = t.scoreParts || {};
       const lr = lineReviewOf(t) || {};
       rows.push([
-        t.rank, t.name, isDepartedTrainer(t)?'да':'', t.score, t.groups, outcomeGroupCount(t), groupsInProgressCount(t),
+        t.rank, t.name, isDepartedTrainer(t)?'да':'', t.score, t.groups, outcomeGroupCount(t), groupsInProgressCount(t), t.notGathered||0,
         t.day1, t.finalCount, t.yieldPerGroup, t.contributionShare,
         t.fellApart||0, t.leftRate, t.conv1to5Weighted, t.conv2, t.conv3,
         lr.avgScore, lr.scored, lr.scriptYesRate, lr.objectionsYesRate, lr.crmYesRate,
@@ -949,11 +1051,37 @@ function exportActiveTabCsv(){
     downloadCsv(`trainers_${stamp}.csv`, rows);
     return;
   }
+  if(tab === 'weeks'){
+    const idx = buildWeeksIndex(weekScopedGroups());
+    const key = resolveWeekKey(idx);
+    const rows = [];
+    if(weekTypeFilter) rows.push(['Тип группы', weekTypeFilter], []);
+    rows.push(['Неделя (пн)','Неделя','Старт групп','Не собралось','Тренеров на старте','1-й день стартовавших','Вышло групп','Ожидают выхода','1-й день вышедших','2-й день вышедших','3-й день вышедших','Итог','Конв 1→5','Ушли сами','Отказали','Перенесли','Распалось','Идут групп','Идут: 1-й день','Идут: 2-й день','Идут: 3-й день']);
+    idx.keys.forEach(k=>{
+      const s = summarizeWeek(idx.map[k]);
+      const p = s.progress;
+      rows.push([k, weekLabel(k, true), s.starts, s.notGathered, s.startTrainers, s.startDay1, s.outcomeGroups, s.pendingGroups, s.day1, s.day2Start, s.day3Start, s.finalCount, s.conv1to5, s.leftSelf, s.refused, s.transferred, s.fellApart, p.groups, p.day1, p.day2Start, p.day3Start]);
+    });
+    if(key){
+      const w = idx.map[key];
+      rows.push([]);
+      rows.push(['Группы недели ' + weekLabel(key, true)]);
+      rows.push(['Группа','Комментарий','Тренер','Уволен','Старт','Выход','Событие','1-й день','2-й день','3-й день','Итог','Ушли сами','Отказали','Перенесли','Конв 1→5','Статус']);
+      [...weekGroupsList(w), ...notGatheredGroupsOf(w.starts)].forEach(g=>rows.push([
+        g.label, g.comment || '', g.trainer, isDepartedTrainer(g.trainer)?'да':'', g.startDate, g.lineDate,
+        isNotGathered(g) ? 'старт (не собралась)' : weekGroupEventText(g, key),
+        g.day1, g.day2Start, g.day3Start, groupCompleted(g) ? g.finalCount : '', g.leftSelf, g.refused, g.transferred, g.conv1to5,
+        isNotGathered(g) ? 'не собралась' : (g.fellApart ? 'распалась' : (groupCompleted(g) ? 'закончилась' : 'в обучении'))
+      ]));
+    }
+    downloadCsv(`weeks_${key || stamp}.csv`, rows);
+    return;
+  }
   if(tab === 'months'){
     const months = viewData.periodFiltered ? viewData.byMonth : (dashboardData.byMonth||[]);
-    const rows = [['Месяц','Групп','Закончились','В обучении','Распалось','1й день','Итог','Ушли сами','Отказали','Перенесли','Конв 1→5','Конв распавш']];
+    const rows = [['Месяц','Групп','Закончились','В обучении','Не собралось','Распалось','1й день','Итог','Ушли сами','Отказали','Перенесли','Конв 1→5','Конв распавш']];
     months.forEach(m=>rows.push([
-      m.month, m.groups, m.groupsCompleted, m.groupsInProgress, m.fellApart||0, m.day1, m.finalCount, m.leftSelf, m.refused, m.transferred, m.conv1to5, m.fellApartConv1to5
+      m.month, m.groups, m.groupsCompleted, m.groupsInProgress, m.notGathered, m.fellApart||0, m.day1, m.finalCount, m.leftSelf, m.refused, m.transferred, m.conv1to5, m.fellApartConv1to5
     ]));
     downloadCsv(`months_${stamp}.csv`, rows);
     return;
@@ -978,10 +1106,10 @@ function exportActiveTabCsv(){
     ['ОС средняя 1–5', t.lineReview && t.lineReview.avgScore],
     ['ОС оценок', t.lineReview && t.lineReview.scored],
     [],
-    ['Месяц','Групп','Закончились','В обучении','Распалось','Ушли сами','Отказали','Перенесли','Конв 1→5','Конв распавш']
+    ['Месяц','Групп','Закончились','В обучении','Не собралось','Распалось','Ушли сами','Отказали','Перенесли','Конв 1→5','Конв распавш']
   ];
   (dashboardData.byMonth||[]).forEach(m=>rows.push([
-    m.month, m.groups, m.groupsCompleted, m.groupsInProgress, m.fellApart||0, m.leftSelf, m.refused, m.transferred, m.conv1to5, m.fellApartConv1to5
+    m.month, m.groups, m.groupsCompleted, m.groupsInProgress, m.notGathered, m.fellApart||0, m.leftSelf, m.refused, m.transferred, m.conv1to5, m.fellApartConv1to5
   ]));
   downloadCsv(`overview_${stamp}.csv`, rows);
 }
@@ -990,10 +1118,17 @@ function activateTab(tab){
   if(!tab) return;
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+tab));
+  updateToolbarForTab(tab);
+}
+
+// Фильтр месяца на вкладку недель не влияет — прячем его там, чтобы не путать.
+function updateToolbarForTab(tab){
+  const left = document.querySelector('#toolbar .toolbar-left');
+  if(left) left.style.display = tab === 'weeks' ? 'none' : '';
 }
 
 function hasDeepLinkIntent(link){
-  return !!(link && (link.period || link.trainer || link.month || link.tab));
+  return !!(link && (link.period || link.trainer || link.month || link.week || link.tab));
 }
 
 function applyPendingDeepLink(){
@@ -1004,12 +1139,14 @@ function applyPendingDeepLink(){
     const exists = (dashboardData.byMonth||[]).some(m=>m.month===link.period);
     if(exists) periodMonth = link.period;
   }
+  if(link.week) periodWeek = link.week;
   viewData = buildViewData(dashboardData, periodMonth);
   fillPeriodSelect(dashboardData);
   renderOverview(viewData);
   renderTrainersTab(viewData);
   renderMonthsTab(viewData);
-  const tab = link.tab || (link.trainer ? 'trainers' : link.month ? 'months' : 'overview');
+  renderWeeksTab();
+  const tab = link.tab || (link.trainer ? 'trainers' : link.month ? 'months' : link.week ? 'weeks' : 'overview');
   activateTab(tab);
   initTabsOnce();
   syncUrl({ period: periodMonth, tab, trainer: link.trainer || '', month: link.month || '' });
@@ -1042,6 +1179,7 @@ function renderAll(){
   renderOverview(viewData);
   renderTrainersTab(viewData);
   renderMonthsTab(viewData);
+  renderWeeksTab();
   activateTab(activeTab);
   initTabsOnce();
   if(!deepLinkApplied && hasDeepLinkIntent(pendingDeepLink)) applyPendingDeepLink();
@@ -1147,6 +1285,7 @@ el('periodSelect').addEventListener('change', () => {
 });
 pendingDeepLink = readDeepLinkFromUrl();
 if(pendingDeepLink.period) periodMonth = pendingDeepLink.period;
+if(pendingDeepLink.week) periodWeek = pendingDeepLink.week;
 if(DEFAULT_APPS_SCRIPT_URL){
   el('urlInput').value = DEFAULT_APPS_SCRIPT_URL;
   el('config').style.display = 'none';
@@ -1164,6 +1303,7 @@ function initTabsOnce(){
       btn.classList.add('active');
       const panel = el('panel-'+btn.dataset.tab);
       if(panel) panel.classList.add('active');
+      updateToolbarForTab(btn.dataset.tab);
       syncUrl({ tab: btn.dataset.tab });
     });
   });
@@ -1240,7 +1380,7 @@ function renderOverview(data){
     : (!showMomOnTotals && prev ? deltaHtml(t.finalCount, prev.finalCount||0, {note}) : deltaHtml(null, null, {note}));
 
   const notHeld = t.notGathered!=null
-    ? `${t.notGathered} не собралась (вне расчёта)`
+    ? `не собралось ${t.notGathered} (вне расчёта)`
     : '«не собралась» недоступно в фильтре месяца';
   const fellShare = t.fellApartShare!=null ? t.fellApartShare
     : (outcomeGroupCount(t) ? round1((t.fellApart||0)/outcomeGroupCount(t)*100) : 0);
@@ -1301,18 +1441,19 @@ function renderOverview(data){
       <div class="section-head"><h2>Отсев по месяцам</h2><div class="desc">Всегда полная история, даже если сверху выбран один месяц</div></div>
       <div style="overflow-x:auto;">
         <table class="dropout-table">
-          <thead><tr><th>Месяц</th><th>Групп</th><th>Распалось</th><th>Ушли сами</th><th>Отказали</th><th>Перенесли</th><th>Конв. 1→5</th></tr></thead>
+          <thead><tr><th>Месяц</th><th>Групп</th><th>Не собр.</th><th>Распалось</th><th>Ушли сами</th><th>Отказали</th><th>Перенесли</th><th>Конв. 1→5</th></tr></thead>
           <tbody>
             ${monthsForFell.map(row=>`
               <tr>
                 <td>${row.month}</td>
                 <td>${row.groups}</td>
+                <td>${row.notGathered!=null?row.notGathered:'—'}</td>
                 <td>${row.fellApart!=null?row.fellApart:0}</td>
                 <td>${row.leftSelf!=null?row.leftSelf:'—'}</td>
                 <td>${row.refused!=null?row.refused:'—'}</td>
                 <td>${row.transferred!=null?row.transferred:'—'}</td>
                 <td><span class="badge ${pctBadgeClass(row.conv1to5)}">${row.conv1to5!=null?row.conv1to5+'%':'—'}</span></td>
-              </tr>`).join('') || '<tr><td colspan="7" style="font-family:var(--font-body);color:var(--text-muted);">Нет данных</td></tr>'}
+              </tr>`).join('') || '<tr><td colspan="8" style="font-family:var(--font-body);color:var(--text-muted);">Нет данных</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -1530,7 +1671,7 @@ function renderTrainerTable(data){
   });
   const cols = [
     ['rank','#'],['name','Тренер'],['score','TQI v3'],['lineScore','ОС 1–5'],['skillsScore','Оценка кандидатов'],['groups','Групп'],['day1','Day1'],['finalCount','Итог'],
-    ['yieldPerGroup','Выход/гр'],['contributionShare','Вклад %'],['fellApart','Распалось'],
+    ['yieldPerGroup','Выход/гр'],['contributionShare','Вклад %'],['notGathered','Не собр.'],['fellApart','Распалось'],
     ['leftRate','Ушли %'],['conv1to5Weighted','Конв. 1→5'],['conv2','Конв. 2→5'],['conv3','Конв. 3→5']
   ];
   el('trainerHeadRow').innerHTML = cols.map(([key,label])=>{
@@ -1547,6 +1688,7 @@ function renderTrainerTable(data){
       <td>${t.groups}${groupsInProgressCount(t)?` <span style="color:var(--text-muted);font-size:11px;">/${outcomeGroupCount(t)}</span>`:''}</td><td>${t.day1}</td><td>${t.finalCount}</td>
       <td>${t.yieldPerGroup!=null?t.yieldPerGroup:'—'}</td>
       <td>${t.contributionShare!=null?t.contributionShare+'%':'—'}</td>
+      <td>${t.notGathered||0}</td>
       <td>${t.fellApart||0}</td>
       <td>${t.leftRate!=null?t.leftRate+'%':'—'}</td>
       <td><span class="badge ${pctBadgeClass(t.conv1to5Weighted)}">${t.conv1to5Weighted!=null?t.conv1to5Weighted+'%':'—'}</span></td>
@@ -1588,7 +1730,9 @@ function openTrainerDetail(name, opts={}){
   const trainer = rankedTrainers(data.byTrainer, data.totals).find(t=>t.name===name)
     || withTrainerScore(data.byTrainer.find(t=>t.name===name) || {}, scoreContextFromTotals(data.totals));
   if(!trainer || !trainer.name) return;
-  const groups = data.groups.filter(g=>g.trainer===name);
+  const groups = validGroupsOf(data.groups).filter(g=>g.trainer===name);
+  const ngTrainer = notGatheredGroupsOf(dashboardData.groups)
+    .filter(g=>g.trainer===name && (!periodMonth || g.month===periodMonth));
   const overallConv = data.totals.conv1to5;
   const tw = trainerConv(trainer);
   const diff = tw!==null ? round1(tw-overallConv) : null;
@@ -1631,7 +1775,7 @@ function openTrainerDetail(name, opts={}){
         ${diff!==null ? `<div class="compare-row ${diff>=0?'up':'down'}">${diff>=0?'▲':'▼'} ${Math.abs(diff)}% к периоду</div>` : ''}
       </div>
       <div class="mini-kpi"><div class="label">Групп / распад / ушли</div><div class="value">${trainer.groups} / ${trainer.fellApart||0}</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">закончились ${outcomeGroupCount(trainer)} · в обучении ${groupsInProgressCount(trainer)} · ушли ${trainer.leftRate!=null?trainer.leftRate+'%':'—'}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">закончились ${outcomeGroupCount(trainer)} · в обучении ${groupsInProgressCount(trainer)}${ngTrainer.length?` · не собралось ${ngTrainer.length}`:''} · ушли ${trainer.leftRate!=null?trainer.leftRate+'%':'—'}</div>
       </div>
     </div>
     <div class="mini-kpi-grid cols-3" style="margin-top:-8px;">
@@ -1658,16 +1802,17 @@ function openTrainerDetail(name, opts={}){
     <div class="funnel" id="trainerFunnel" style="margin-bottom:22px;"></div>
     <div class="section-head"><h2>Группы тренера</h2></div>
     <table class="dropout-table" style="margin-bottom:18px;">
-      <thead><tr><th>Группа</th><th>Старт</th><th>1-й день</th><th>Итог</th><th>Конв.</th><th>Статус</th></tr></thead>
+      <thead><tr><th>Группа</th><th>Тип</th><th>Старт</th><th>1-й день</th><th>Итог</th><th>Конв.</th><th>Статус</th></tr></thead>
       <tbody>
-        ${groups.map(g=>`<tr>
+        ${[...groups, ...ngTrainer].sort((a,b)=>String(a.startDate||'').localeCompare(String(b.startDate||''))).map(g=>`<tr>
           <td>${g.label||'—'}</td>
+          <td>${groupTypeOf(g)||'—'}</td>
           <td>${g.startDate||'—'}</td>
           <td>${g.day1}</td>
           <td>${g.finalCount}</td>
           <td><span class="badge ${pctBadgeClass(g.conv1to5)}">${g.conv1to5!=null?g.conv1to5+'%':'—'}</span></td>
           <td>${groupStatusBadge(g)}</td>
-        </tr>`).join('') || '<tr><td colspan="6" style="font-family:var(--font-body);color:var(--text-muted);">Нет групп</td></tr>'}
+        </tr>`).join('') || '<tr><td colspan="7" style="font-family:var(--font-body);color:var(--text-muted);">Нет групп</td></tr>'}
       </tbody>
     </table>
     <div class="section-head"><h2>Динамика и отсев по месяцам</h2></div>
@@ -1733,6 +1878,7 @@ function renderMonthsTab(data){
       <h3>${m.month}</h3>
       <div class="row"><span>Групп</span><b>${m.groups}</b></div>
       <div class="row"><span>В обучении</span><b>${m.groupsInProgress!=null?m.groupsInProgress:0}</b></div>
+      <div class="row"><span>Не собралось</span><b>${m.notGathered!=null?m.notGathered:'—'}</b></div>
       <div class="row"><span>Распалось</span><b>${m.fellApart!=null?m.fellApart:0}</b></div>
       <div class="row"><span>Конв. 1→5</span><b>${m.conv1to5!==null&&m.conv1to5!==undefined?m.conv1to5+'%':'—'}</b></div>
       <div class="row"><span>Ушли сами</span><b>${m.leftSelf!=null?m.leftSelf:'—'}</b></div>
@@ -1743,8 +1889,9 @@ function renderMonthsTab(data){
 }
 
 function openMonthDetail(month, opts={}){
-  const sourceGroups = dashboardData.groups || [];
-  const groups = sourceGroups.filter(g=>g.month===month);
+  const inMonth = (dashboardData.groups || []).filter(g=>g.month===month);
+  const groups = validGroupsOf(inMonth);
+  const ngMonth = notGatheredGroupsOf(inMonth);
   const completed = outcomeGroupsOf(groups);
   const day1 = completed.reduce((s,g)=>s+g.day1,0);
   const day2 = completed.reduce((s,g)=>s+g.day2Start,0);
@@ -1779,7 +1926,7 @@ function openMonthDetail(month, opts={}){
     </div>
     <div class="mini-kpi-grid">
       <div class="mini-kpi"><div class="label">Групп</div><div class="value">${groups.length}</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">закончились ${completed.length} · в обучении ${groups.length-completed.length}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">закончились ${completed.length} · в обучении ${groups.length-completed.length}${ngMonth.length?` · не собралось ${ngMonth.length}`:''}</div>
         ${prev?`<div class="compare-row ${groups.length-prev.groups>=0?'up':'down'}">${groups.length-prev.groups>=0?'▲':'▼'} ${Math.abs(groups.length-prev.groups)} к ${prev.month}</div>`:''}
       </div>
       <div class="mini-kpi"><div class="label">Конв. 1→5</div><div class="value">${conv}%</div>
@@ -1819,6 +1966,547 @@ function openMonthDetail(month, opts={}){
     }
   });
   if(!opts.skipUrl) syncUrl({ month, tab: 'months', trainer: '' });
+}
+
+// ======================================================
+// НЕДЕЛИ — понедельная выжимка (presentation-aggregate из groups[], ADR-020)
+// Неделя = пн–вс. Старт группы → неделя startDate.
+// Итоги (day1→итог, отсев, конверсия) → неделя lineDate, только законченные (completed).
+// Фильтр месяца не применяется: неделя сама является периодом.
+// ======================================================
+function parseIsoDate(s){
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || '');
+  return m ? new Date(Date.UTC(+m[1], +m[2]-1, +m[3])) : null;
+}
+function isoOfDate(d){ return d.toISOString().slice(0,10); }
+function weekKeyOf(iso){
+  const d = parseIsoDate(iso);
+  if(!d) return null;
+  d.setUTCDate(d.getUTCDate() - (d.getUTCDay()+6)%7);
+  return isoOfDate(d);
+}
+function addDaysIso(iso, n){ const d = parseIsoDate(iso); d.setUTCDate(d.getUTCDate()+n); return isoOfDate(d); }
+function ddmm(iso){ return iso ? iso.slice(8,10)+'.'+iso.slice(5,7) : '—'; }
+function weekLabel(key, withYear){
+  const end = addDaysIso(key, 6);
+  return `${ddmm(key)}–${ddmm(end)}${withYear ? '.'+end.slice(0,4) : ''}`;
+}
+function todayIsoLocal(){
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;
+}
+
+/** Непрерывный ряд недель от первой группы до max(сегодня, последняя дата в данных). */
+function buildWeeksIndex(groups){
+  const map = {};
+  const ensure = k => map[k] || (map[k] = { key:k, starts:[], lines:[] });
+  (groups||[]).forEach(g=>{
+    const sk = weekKeyOf(g.startDate);
+    if(sk) ensure(sk).starts.push(g); // «не собралась» — только в стартах недели, как карточка со статусом
+    if(isNotGathered(g)) return;
+    const lk = weekKeyOf(g.lineDate);
+    if(lk) ensure(lk).lines.push(g);
+  });
+  const dataKeys = Object.keys(map).sort();
+  const currentKey = weekKeyOf(todayIsoLocal());
+  if(!dataKeys.length) return { keys:[], map, currentKey };
+  const first = dataKeys[0];
+  const lastData = dataKeys[dataKeys.length-1];
+  const last = currentKey && currentKey > lastData ? currentKey : lastData;
+  const keys = [];
+  for(let k = first; k <= last; k = addDaysIso(k, 7)){ ensure(k); keys.push(k); }
+  return { keys, map, currentKey };
+}
+
+function resolveWeekKey(idx){
+  if(periodWeek && idx.keys.includes(periodWeek)) return periodWeek;
+  if(idx.currentKey && idx.keys.includes(idx.currentKey)) return idx.currentKey;
+  return idx.keys[idx.keys.length-1] || '';
+}
+
+function summarizeWeek(w){
+  const outcome = w.lines.filter(groupCompleted);
+  // Идущие группы недели (стартовали или выходят на этой неделе, дата D ещё не наступила) — только «предварительно»
+  const prog = weekGroupsList(w).filter(g=>!groupCompleted(g));
+  const day1 = sumField(outcome,'day1');
+  const finalCount = sumField(outcome,'finalCount');
+  const leftSelf = sumField(outcome,'leftSelf');
+  const validStarts = validGroupsOf(w.starts);
+  return {
+    key: w.key,
+    starts: validStarts.length,
+    notGathered: w.starts.length - validStarts.length,
+    startTrainers: new Set(validStarts.map(g=>g.trainer)).size,
+    startDay1: sumField(validStarts,'day1'),
+    outcomeGroups: outcome.length,
+    pendingGroups: w.lines.length - outcome.length,
+    day1,
+    day2Start: sumField(outcome,'day2Start'),
+    day3Start: sumField(outcome,'day3Start'),
+    finalCount,
+    leftSelf,
+    refused: sumField(outcome,'refused'),
+    transferred: sumField(outcome,'transferred'),
+    fellApart: outcome.filter(g=>g.fellApart).length,
+    conv1to5: day1>0 ? round1(finalCount/day1*100) : null,
+    leftRate: day1>0 ? round1(leftSelf/day1*100) : null,
+    progress: {
+      groups: prog.length,
+      day1: sumField(prog,'day1'),
+      day2Start: sumField(prog,'day2Start'),
+      day3Start: sumField(prog,'day3Start'),
+      leftSelf: sumField(prog,'leftSelf'),
+      refused: sumField(prog,'refused'),
+      transferred: sumField(prog,'transferred')
+    }
+  };
+}
+
+/** Воронка недели в две части: законченные (сплошная) + в обучении (штриховка, предварительно). */
+function renderWeekFunnel(elId, s){
+  const p = s.progress;
+  const rows = [
+    {label:'1-й день', done:s.day1, prog:p.day1},
+    {label:'2-й день', done:s.day2Start, prog:p.day2Start},
+    {label:'3-й день', done:s.day3Start, prog:p.day3Start},
+    {label:'Выход на линию', done:s.finalCount, prog:0}
+  ];
+  const max = Math.max(1, rows[0].done + rows[0].prog);
+  el(elId).innerHTML = rows.map((r,i)=>{
+    const wd = r.done ? Math.max(4, Math.round(r.done/max*100)) : 0;
+    const wp = r.prog ? Math.max(4, Math.round(r.prog/max*100)) : 0;
+    const prev = i>0 ? rows[i-1].done : 0;
+    const drop = i>0 && prev>0 ? '−'+round1((1-r.done/prev)*100)+'%' : '';
+    return `<div class="funnel-row"><div class="funnel-label">${r.label}</div>
+      <div class="funnel-track" style="display:flex;">
+        ${wd?`<div class="funnel-fill" style="width:${wd}%;${wp?'border-radius:8px 0 0 8px;':''}"><span>${r.done}</span></div>`:''}
+        ${wp?`<div class="funnel-fill progress" style="width:${wp}%;${wd?'border-radius:0 8px 8px 0;':''}"><span>${r.prog}</span></div>`:''}
+      </div>
+      <div class="funnel-drop">${drop}</div></div>`;
+  }).join('');
+}
+
+/** Группы недели для таблиц и расчётов — без «не собралась». */
+function weekGroupsList(w){
+  return validGroupsOf([...new Set([...w.starts, ...w.lines])]).sort((a,b)=>
+    String(a.startDate||'').localeCompare(String(b.startDate||'')) || String(a.trainer).localeCompare(String(b.trainer),'ru'));
+}
+function weekGroupEventText(g, key){
+  const s = weekKeyOf(g.startDate)===key, l = weekKeyOf(g.lineDate)===key;
+  if(s && l) return 'старт + выход';
+  if(s) return 'старт';
+  return groupCompleted(g) ? 'выход' : 'выход (ожидается)';
+}
+function weekGroupEventBadge(g, key){
+  const text = weekGroupEventText(g, key);
+  return `<span class="badge ${text==='старт' ? 'neutral' : (text==='выход (ожидается)' ? 'warning' : 'accent')}">${text}</span>`;
+}
+
+function weekTrainerRows(w){
+  const map = {};
+  const ensure = n => map[n] || (map[n] = { name:n, starts:0, notGathered:0, outcomeGroups:0, pending:0, day1:0, finalCount:0, leftSelf:0, refused:0, transferred:0, fellApart:0, progGroups:0, progDay1:0, progDay2:0, progDay3:0 });
+  w.starts.forEach(g=>{ const t = ensure(g.trainer); if(isNotGathered(g)) t.notGathered += 1; else t.starts += 1; });
+  weekGroupsList(w).filter(g=>!groupCompleted(g)).forEach(g=>{
+    const t = ensure(g.trainer);
+    t.progGroups += 1; t.progDay1 += Number(g.day1)||0;
+    t.progDay2 += Number(g.day2Start)||0; t.progDay3 += Number(g.day3Start)||0;
+  });
+  w.lines.forEach(g=>{
+    const t = ensure(g.trainer);
+    if(!groupCompleted(g)){ t.pending += 1; return; }
+    t.outcomeGroups += 1;
+    t.day1 += Number(g.day1)||0; t.finalCount += Number(g.finalCount)||0;
+    t.leftSelf += Number(g.leftSelf)||0; t.refused += Number(g.refused)||0; t.transferred += Number(g.transferred)||0;
+    if(g.fellApart) t.fellApart += 1;
+  });
+  return Object.values(map).map(t=>Object.assign(t, {
+    conv: t.day1>0 ? round1(t.finalCount/t.day1*100) : null
+  })).sort((a,b)=>(b.finalCount-a.finalCount) || (b.starts-a.starts) || a.name.localeCompare(b.name,'ru'));
+}
+
+const WEEKDAY_SHORT = ['вс','пн','вт','ср','чт','пт','сб'];
+function weekdayOf(iso){ const d = parseIsoDate(iso); return d ? WEEKDAY_SHORT[d.getUTCDay()] : ''; }
+function isWorkdayIso(iso){ const d = parseIsoDate(iso).getUTCDay(); return d>=1 && d<=5; }
+function workdaysInclusive(a, b){
+  if(!a || !b || a > b) return 0;
+  let n = 0;
+  for(let k = a; k <= b; k = addDaysIso(k, 1)) if(isWorkdayIso(k)) n++;
+  return n;
+}
+function daysBetweenIso(a, b){ return Math.round((parseIsoDate(b) - parseIsoDate(a)) / DAY_MS); }
+function plural(n, one, few, many){
+  const a = Math.abs(n) % 100, b = a % 10;
+  if(a > 10 && a < 20) return many;
+  if(b === 1) return one;
+  if(b >= 2 && b <= 4) return few;
+  return many;
+}
+
+/**
+ * Что с группой сегодня. Учебные дни — рабочие (пн–пт) от даты старта до дня перед выходом (колонка D);
+ * день старта = 1-й день. Это подпись для людей, в расчёты не идёт.
+ */
+function groupTodayState(g, today){
+  const start = g.startDate, line = g.lineDate;
+  const total = start && line ? Math.max(1, workdaysInclusive(start, addDaysIso(line, -1))) : null;
+  const st = { total, day: 0 };
+  if(!start) return Object.assign(st, { kind:'none', text:'Нет даты старта' });
+  if(isNotGathered(g)) return Object.assign(st, { kind:'notg', text:'Группа не собралась', total:null });
+  if(g.fellApart) return Object.assign(st, { kind:'fell', text:'Группа распалась', day: total || 0 });
+  if(today < start){
+    const n = daysBetweenIso(today, start);
+    return Object.assign(st, { kind:'soon', text: n === 1 ? 'Старт завтра' : `Старт ${weekdayOf(start)} ${ddmm(start)}` });
+  }
+  if(line && today === line) return Object.assign(st, { kind:'line', text:'Сегодня выход на линию', day: total });
+  if(line && today > line) return Object.assign(st, { kind:'done', text:`Вышла на линию ${ddmm(line)}`, day: total });
+  const day = workdaysInclusive(start, today);
+  if(!isWorkdayIso(today)) return Object.assign(st, { kind:'weekend', text:`Выходные · пройдено ${day}${total ? ' из ' + total : ''} дн.`, day });
+  return Object.assign(st, { kind:'train', text: day === 1 ? 'Сегодня 1-й день — старт' : `Сегодня ${day}-й день обучения${total ? ' из ' + total : ''}`, day });
+}
+
+function groupStepsHtml(st, g){
+  if(!st.total) return '';
+  let html = '';
+  for(let i = 1; i <= st.total; i++){
+    let cls = '';
+    if(st.kind === 'fell') cls = 'fell';
+    else if(st.kind === 'train' && i === st.day) cls = 'now';
+    else if(i <= st.day) cls = 'done';
+    html += `<div class="wk-step ${cls}" title="${i}-й день"></div>`;
+  }
+  const lineCls = st.kind === 'done' ? 'line-done' : (st.kind === 'line' ? 'line-now' : '');
+  html += `<div class="wk-step wk-step-line ${lineCls}" title="Выход на линию ${ddmm(g.lineDate)}"></div>`;
+  return `<div class="wk-steps">${html}</div>
+    <div class="wk-steps-cap"><span>старт ${weekdayOf(g.startDate)} ${ddmm(g.startDate)}</span><span>линия ${weekdayOf(g.lineDate)} ${ddmm(g.lineDate)}</span></div>`;
+}
+
+function groupNumbersHtml(g){
+  if(isNotGathered(g)) return `<div class="wk-nums muted-num">Старт планировался ${weekdayOf(g.startDate)} ${ddmm(g.startDate)}. В таблице отмечено: «${g.comment || 'не собралась'}». В цифры недели не входит.</div>`;
+  const done = groupCompleted(g);
+  const parts = [];
+  if(Number(g.day1)) parts.push(`пришли <b>${g.day1}</b>`);
+  if(Number(g.day2Start)) parts.push(`2-й день <b>${g.day2Start}</b>`);
+  if(Number(g.day3Start)) parts.push(`3-й день <b>${g.day3Start}</b>`);
+  if(done) parts.push(`на линии <b>${g.finalCount}</b>${g.conv1to5 != null ? ` <span class="badge ${pctBadgeClass(g.conv1to5)}">${g.conv1to5}%</span>` : ''}`);
+  let html = parts.length
+    ? `<div class="wk-nums">${parts.join('<span class="wk-sep">→</span>')}</div>`
+    : '<div class="wk-nums muted-num">Цифры ещё не внесены в таблицу</div>';
+  const drop = (Number(g.leftSelf)||0) + (Number(g.refused)||0) + (Number(g.transferred)||0);
+  if(drop) html += `<div class="wk-drop">Отсеялись ${drop}${done ? '' : ' (пока)'}: ушли сами ${g.leftSelf} · отказали ${g.refused} · перенесли ${g.transferred}</div>`;
+  return html;
+}
+
+function groupCardHtml(g, today){
+  const st = groupTodayState(g, today);
+  const live = st.kind === 'train' || st.kind === 'line';
+  return `<div class="wk-card ${live ? 'live' : ''} ${st.kind === 'notg' ? 'notg' : ''}" data-trainer="${g.trainer}">
+    <div class="wk-card-head">
+      <div><div class="wk-title">${g.label || 'Группа'}</div><div class="wk-trainer">${trainerNameLabel(g.trainer)}</div>${groupTypeOf(g)?`<div class="wk-type">${groupTypeTag(g)}</div>`:''}</div>
+      <span class="wk-status ${st.kind}">${st.text}</span>
+    </div>
+    ${groupStepsHtml(st, g)}
+    ${groupNumbersHtml(g)}
+  </div>`;
+}
+
+/** «на прошлой неделе (09.11–15.11)» или «раньше (на неделях 02.11–08.11, 09.11–15.11)». */
+function carriedWeeksText(carried, prevKey){
+  const keys = [...new Set(carried.map(g=>weekKeyOf(g.startDate)).filter(Boolean))].sort();
+  if(keys.length===1 && keys[0]===prevKey) return `на прошлой неделе (${weekLabel(prevKey)})`;
+  return `раньше (${keys.length===1 ? 'на неделе' : 'на неделях'} ${keys.map(k=>weekLabel(k)).join(', ')})`;
+}
+
+function weekBriefHtml(s, ctx){
+  const m = metrics();
+  const lines = [];
+  if(ctx.isCurrent && ctx.weekGroups.length){
+    const states = ctx.weekGroups.map(g=>groupTodayState(g, ctx.today));
+    const startToday = ctx.weekGroups.filter(g=>g.startDate === ctx.today).length;
+    const lineToday = states.filter(x=>x.kind === 'line').length;
+    const training = states.filter(x=>x.kind === 'train' || x.kind === 'weekend').length - startToday;
+    const bits = [];
+    if(startToday) bits.push(`стартуют ${startToday} ${plural(startToday,'группа','группы','групп')}`);
+    if(training > 0) bits.push(`${training} ${plural(training,'группа','группы','групп')} в обучении`);
+    if(lineToday) bits.push(`${lineToday} ${plural(lineToday,'группа выходит','группы выходят','групп выходят')} на линию`);
+    if(bits.length) lines.push(`<b>Сегодня, ${weekdayOf(ctx.today)} ${ddmm(ctx.today)}:</b> ${bits.join(', ')}.`);
+  }
+  const people = n => `${n} ${plural(n,'человек','человека','человек')}`;
+  if(s.starts){
+    lines.push(`<b>${plural(s.starts,'Стартовала','Стартовали','Стартовали')} ${s.starts} ${plural(s.starts,'группа','группы','групп')}</b>${s.startDay1 ? ` — в первый день пришли ${people(s.startDay1)}` : ' — данные первого дня ещё не внесены'}.`);
+  } else {
+    lines.push('Новых групп на этой неделе не стартовало.');
+  }
+  if(s.notGathered) lines.push(`<b>Не ${plural(s.notGathered,'собралась','собрались','собрались')} ${s.notGathered} ${plural(s.notGathered,'группа','группы','групп')}</b> — людей не было, в цифры не входят.`);
+  if(s.outcomeGroups){
+    const dropTotal = s.leftSelf + s.refused + s.transferred;
+    lines.push(`<b>На линию ${plural(s.finalCount,'вышел','вышли','вышли')} ${people(s.finalCount)}</b> — из ${s.day1}, кто пришёл в первый день (${s.outcomeGroups} ${plural(s.outcomeGroups,'группа','группы','групп')}). Дошли ${s.conv1to5}% при цели ${m.planConv1to5}%${s.conv1to5 >= m.planConv1to5 ? ' ✓' : ' — ниже цели'}.`);
+    if(dropTotal) lines.push(`${plural(dropTotal,'Отсеялся','Отсеялись','Отсеялись')} ${people(dropTotal)}: сами ушли ${s.leftSelf}, отказали мы ${s.refused}, перенесли ${s.transferred}.`);
+  } else if(!ctx.isFuture){
+    lines.push(ctx.isCurrent ? 'На линию на этой неделе пока никто не вышел.' : 'На этой неделе ни одна группа не выходила на линию.');
+  }
+  if(s.pendingGroups) lines.push(`Ещё ${s.pendingGroups} ${plural(s.pendingGroups,'группа выйдет','группы выйдут','групп выйдут')} на линию до конца недели.`);
+  if(s.fellApart) lines.push(`Распалось ${s.fellApart} ${plural(s.fellApart,'группа','группы','групп')}.`);
+  return `<ul class="wk-brief">${lines.map(l=>`<li>${l}</li>`).join('')}</ul>`;
+}
+
+/** Типы групп для фильтра и сами группы с учётом фильтра (вкладка недель и её CSV). */
+function weekGroupTypes(){
+  return [...new Set((dashboardData.groups||[]).map(groupTypeOf).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
+}
+function weekScopedGroups(){
+  const all = dashboardData.groups || [];
+  if(weekTypeFilter && !weekGroupTypes().includes(weekTypeFilter)) weekTypeFilter = '';
+  return weekTypeFilter ? all.filter(g=>groupTypeOf(g)===weekTypeFilter) : all;
+}
+
+function renderWeeksTab(){
+  if(!dashboardData) return;
+  const groups = weekScopedGroups();
+  const types = weekGroupTypes();
+  const idx = buildWeeksIndex(groups);
+  const old = el('panel-weeks');
+  const wasActive = old ? old.classList.contains('active') : false;
+  const mount = html => {
+    if(old) old.outerHTML = html; else el('content').insertAdjacentHTML('beforeend', html);
+    if(wasActive) el('panel-weeks').classList.add('active');
+  };
+  if(!idx.keys.length){
+    mount(`<div id="panel-weeks" class="tab-panel"><div class="placeholder"><div class="big">Нет групп с датами</div></div></div>`);
+    return;
+  }
+  const m = metrics();
+  const today = todayIsoLocal();
+  const key = resolveWeekKey(idx);
+  const pos = idx.keys.indexOf(key);
+  const w = idx.map[key];
+  const s = summarizeWeek(w);
+  const prevKey = pos>0 ? idx.keys[pos-1] : null;
+  const nextKey = pos<idx.keys.length-1 ? idx.keys[pos+1] : null;
+  const p = prevKey ? summarizeWeek(idx.map[prevKey]) : null;
+  const note = p ? `к прошлой неделе (${weekLabel(prevKey)})` : 'нет прошлой недели';
+  const d = (cur, prv, opts={}) => p ? deltaHtml(cur, prv, Object.assign({note}, opts)) : deltaHtml(null, null, {note});
+  const isCurrent = key===idx.currentKey;
+  const isFuture = !!(idx.currentKey && key>idx.currentKey);
+  const trendKeys = idx.keys.slice(Math.max(0, pos-WEEK_TREND_LEN+1), pos+1);
+  const trend = trendKeys.map(k=>summarizeWeek(idx.map[k]));
+  const weekGroups = weekGroupsList(w);
+  const trainers = weekTrainerRows(w);
+  const byStart = (a,b)=>String(a.startDate||'').localeCompare(String(b.startDate||'')) || String(a.trainer).localeCompare(String(b.trainer),'ru');
+  const startedHere = w.starts.slice().sort(byStart);
+  const carried = w.lines.filter(g=>weekKeyOf(g.startDate)!==key).sort(byStart);
+  const dropTotal = s.leftSelf + s.refused + s.transferred;
+  const prevDrop = p ? p.leftSelf + p.refused + p.transferred : null;
+
+  const options = [...idx.keys].reverse().map(k=>{
+    const x = summarizeWeek(idx.map[k]);
+    const tag = k===idx.currentKey ? ' · текущая' : '';
+    const info = (!x.starts && !x.outcomeGroups && !x.pendingGroups && !x.notGathered) ? ' · групп не было'
+      : ` · старт ${x.starts} · вышли ${x.outcomeGroups}${x.pendingGroups?` · ждут выхода ${x.pendingGroups}`:''}${x.notGathered?` · не собралось ${x.notGathered}`:''}`;
+    return `<option value="${k}" ${k===key?'selected':''}>${weekLabel(k, true)}${tag}${info}</option>`;
+  }).join('');
+
+  const empty = !weekGroups.length && !w.starts.length;
+  const html = `<div id="panel-weeks" class="tab-panel">
+    <div class="context-banner">
+      <div>
+        <div class="eyebrow">По неделям · пн–вс</div>
+        <div class="headline">Неделя ${weekLabel(key, true)}${isCurrent?' — текущая':''}</div>
+        <div class="support">Сначала — коротко о неделе и что сегодня с каждой группой. Цифры результата считаем только по группам, которые уже вышли на линию.</div>
+      </div>
+      <div class="week-nav">
+        <button class="btn" id="weekPrev" type="button" ${prevKey?'':'disabled'} aria-label="Предыдущая неделя">‹</button>
+        <select id="weekSelect" aria-label="Выбор недели">${options}</select>
+        <button class="btn" id="weekNext" type="button" ${nextKey?'':'disabled'} aria-label="Следующая неделя">›</button>
+        <button class="btn" id="weekCurrent" type="button" ${idx.currentKey && idx.keys.includes(idx.currentKey) && !isCurrent?'':'style="display:none;"'}>Текущая неделя</button>
+        <button class="btn" id="copyWeekLink" type="button">Ссылка</button>
+        ${types.length ? `<select id="weekTypeSelect" class="wk-type-select" aria-label="Тип группы">
+          <option value="">Все типы групп</option>
+          ${types.map(t=>`<option value="${t}" ${t===weekTypeFilter?'selected':''}>${t}</option>`).join('')}
+        </select>` : ''}
+      </div>
+      ${weekTypeFilter ? `<div class="footnote" style="flex-basis:100%;margin-top:0;">Показаны только группы с типом «${weekTypeFilter}» — цифры недели посчитаны по ним.</div>` : ''}
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>Коротко о неделе</h2></div>
+      ${empty ? '<div class="footnote">На этой неделе групп не было: ни стартов, ни выходов на линию.</div>' : weekBriefHtml(s, { today, isCurrent, isFuture, weekGroups })}
+    </div>
+
+    ${empty ? '' : `
+    <div class="section">
+      <div class="section-head"><h2>Стартовали на этой неделе (${weekLabel(key)})</h2><div class="desc">${startedHere.length} ${plural(startedHere.length,'группа','группы','групп')} · клик — карточка тренера</div></div>
+      ${startedHere.length ? `<div class="wk-groups">${startedHere.map(g=>groupCardHtml(g, today)).join('')}</div>` : '<div class="footnote">Новых групп на этой неделе не было.</div>'}
+    </div>
+    ${carried.length ? `<div class="section">
+      <div class="section-head"><h2>Начали ${carriedWeeksText(carried, prevKey)} — выходят на линию на этой неделе</h2><div class="desc">${carried.length} ${plural(carried.length,'группа','группы','групп')} · старт ${carried.map(g=>`${weekdayOf(g.startDate)} ${ddmm(g.startDate)}`).filter((v,i,a)=>a.indexOf(v)===i).join(', ')}</div></div>
+      <div class="wk-groups">${carried.map(g=>groupCardHtml(g, today)).join('')}</div>
+    </div>` : ''}`}
+
+    <div class="kpi-grid kpi-4">
+      <div class="kpi-card"><div class="label">Стартовало групп</div><div class="value">${s.starts}</div>
+        <div class="sub">${s.starts && !s.startDay1 ? 'данные 1-го дня ещё не внесены' : `пришли в 1-й день: ${s.startDay1} чел.`}${s.notGathered?` · не собралось ${s.notGathered}`:''}</div>${d(s.starts, p&&p.starts)}</div>
+      <div class="kpi-card accent"><div class="label">Вышли на линию, чел.</div><div class="value">${s.finalCount}</div>
+        <div class="sub">${s.outcomeGroups ? `${s.outcomeGroups} ${plural(s.outcomeGroups,'группа','группы','групп')} · пришло было ${s.day1}` : 'пока ни одна группа не вышла'}${s.pendingGroups?` · ждут выхода ${s.pendingGroups}`:''}</div>${d(s.finalCount, p&&p.finalCount)}</div>
+      <div class="kpi-card ${s.conv1to5==null?'':(s.conv1to5>=m.planConv1to5?'success':'danger')}"><div class="label">Дошли до линии</div><div class="value">${s.conv1to5!=null?s.conv1to5+'%':'—'}</div>
+        <div class="sub">${s.conv1to5!=null?`из 100 пришедших дошли ${Math.round(s.conv1to5)} · цель ${m.planConv1to5}%`:`цель ${m.planConv1to5}% · появится после выхода групп`}</div>${d(s.conv1to5, p&&p.conv1to5, {unit:'%'})}</div>
+      <div class="kpi-card danger"><div class="label">Отсеялись, чел.</div><div class="value">${dropTotal}</div>
+        <div class="sub">${s.outcomeGroups?`ушли сами ${s.leftSelf} · отказали ${s.refused} · перенесли ${s.transferred}`:'по вышедшим группам'}</div>${d(dropTotal, prevDrop, {invert:true})}</div>
+    </div>
+
+    <details class="wk-more" id="weekMore" ${weekDetailsOpen?'open':''}>
+      <summary>Подробная аналитика недели — воронка, тренеры, динамика, таблицы</summary>
+      <div class="wk-more-body">
+        <div class="two-col">
+          <div class="section"><div class="section-head"><h2>Воронка недели</h2><div class="desc">Законченные + идущие группы недели</div></div>
+            ${(s.outcomeGroups || s.progress.groups) ? '<div class="funnel" id="weekFunnel"></div>' : '<div class="footnote">На этой неделе групп нет.</div>'}
+            <div class="footnote">
+              <span class="legend-swatch done"></span>законченные: ${s.outcomeGroups} гр. — входят в цифры результата ·
+              <span class="legend-swatch progress"></span>в обучении: ${s.progress.groups} гр. — предварительно, по уже внесённым дням.
+              ${s.progress.groups && (s.progress.leftSelf||s.progress.refused||s.progress.transferred) ? `<br>В идущих группах уже: ушли ${s.progress.leftSelf} · отказали ${s.progress.refused} · перенесли ${s.progress.transferred}.` : ''}
+              Проценты справа — только по законченным.
+            </div>
+          </div>
+          <div class="section"><div class="section-head"><h2>Динамика по неделям</h2><div class="desc">Последние ${trend.length} нед. до выбранной · выход и доля дошедших</div></div>
+            <div style="position:relative;height:220px;"><canvas id="weekTrendChart"></canvas></div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-head"><h2>Таблица групп недели</h2><div class="desc">Те же группы одной таблицей · клик — карточка тренера</div></div>
+          <div style="overflow-x:auto;">
+            <table class="dropout-table" id="weekGroupsTable">
+              <thead><tr><th>Группа</th><th>Тип</th><th>Тренер</th><th>Старт</th><th>Выход</th><th>Событие</th><th>1-й день</th><th>2-й день</th><th>3-й день</th><th>Итог</th><th>Ушли / отказ / перенос</th><th>Конв.</th><th>Статус</th></tr></thead>
+              <tbody>
+                ${weekGroups.map(g=>{
+                  const done = groupCompleted(g);
+                  const v = n => (n || n===0) ? n : '—';
+                  const live = n => done ? v(n) : (Number(n) ? n : '<span class="muted-num">—</span>');
+                  return `<tr data-trainer="${g.trainer}">
+                  <td>${g.label||'—'}</td>
+                  <td>${groupTypeOf(g)||'—'}</td>
+                  <td>${trainerNameLabel(g.trainer)}</td>
+                  <td>${ddmm(g.startDate)}</td>
+                  <td>${ddmm(g.lineDate)}</td>
+                  <td>${weekGroupEventBadge(g, key)}</td>
+                  <td>${live(g.day1)}</td>
+                  <td>${live(g.day2Start)}</td>
+                  <td>${live(g.day3Start)}</td>
+                  <td>${done?g.finalCount:'<span class="muted-num">идёт</span>'}</td>
+                  <td>${done?`${g.leftSelf} / ${g.refused} / ${g.transferred}`
+                    : ((g.leftSelf||g.refused||g.transferred) ? `<span class="muted-num">${g.leftSelf} / ${g.refused} / ${g.transferred}</span>` : '<span class="muted-num">—</span>')}</td>
+                  <td>${done?`<span class="badge ${pctBadgeClass(g.conv1to5)}">${g.conv1to5!=null?g.conv1to5+'%':'—'}</span>`:'—'}</td>
+                  <td>${groupStatusBadge(g)}</td>
+                </tr>`;}).join('') || '<tr><td colspan="13" style="font-family:var(--font-body);color:var(--text-muted);">Нет групп</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+          <div class="footnote">Для групп «в обучении» видны уже внесённые дни и отсев (серым, предварительно); итог и конверсия появятся после даты выхода.</div>
+        </div>
+        <div class="section">
+          <div class="section-head"><h2>Тренеры недели</h2><div class="desc">Без TQI: на 1–2 группах рейтинг не показателен · сортировка по выходу</div></div>
+          <div style="overflow-x:auto;">
+            <table class="dropout-table" id="weekTrainersTable">
+              <thead><tr><th>Тренер</th><th>Стартов</th><th>Идут сейчас</th><th>Вышло групп</th><th>1-й день → итог</th><th>Конв.</th><th>Ушли сами</th><th>Отказ / перенос</th><th>Распалось</th></tr></thead>
+              <tbody>
+                ${trainers.map(t=>`<tr data-trainer="${t.name}">
+                  <td>${trainerNameLabel(t.name)}</td>
+                  <td>${t.starts}${t.notGathered?` <span class="muted-num">· не собр. ${t.notGathered}</span>`:''}</td>
+                  <td>${t.progGroups?`${t.progGroups} гр. <span class="muted-num">· 1-й ${t.progDay1||'—'} · 2-й ${t.progDay2||'—'} · 3-й ${t.progDay3||'—'}</span>`:'—'}</td>
+                  <td>${t.outcomeGroups}${t.pending?` <span style="color:var(--text-muted);font-size:11px;">· ждут ${t.pending}</span>`:''}</td>
+                  <td>${t.outcomeGroups?`${t.day1} → ${t.finalCount}`:'—'}</td>
+                  <td>${t.outcomeGroups?`<span class="badge ${pctBadgeClass(t.conv)}">${t.conv!=null?t.conv+'%':'—'}</span>`:'—'}</td>
+                  <td>${t.outcomeGroups?t.leftSelf:'—'}</td>
+                  <td>${t.outcomeGroups?`${t.refused} / ${t.transferred}`:'—'}</td>
+                  <td>${t.fellApart}</td>
+                </tr>`).join('') || '<tr><td colspan="9" style="font-family:var(--font-body);color:var(--text-muted);">Нет тренеров на этой неделе</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-head"><h2>Последние недели</h2><div class="desc">Сводка по неделям до выбранной · клик — открыть неделю</div></div>
+          <div style="overflow-x:auto;">
+            <table class="dropout-table" id="weekListTable">
+              <thead><tr><th>Неделя</th><th>Старт групп</th><th>Вышло групп</th><th>1-й день → итог</th><th>Конв. 1→5</th><th>Ушли</th><th>Отказ.</th><th>Перен.</th><th>Распалось</th></tr></thead>
+              <tbody>
+                ${[...trend].reverse().map(x=>(!x.starts && !x.outcomeGroups && !x.pendingGroups && !x.notGathered)
+                  ? `<tr data-week="${x.key}" class="${x.key===key?'is-selected':''}">
+                  <td>${weekLabel(x.key)}</td><td colspan="8" style="font-family:var(--font-body);color:var(--text-muted);">групп не было</td></tr>`
+                  : `<tr data-week="${x.key}" class="${x.key===key?'is-selected':''}">
+                  <td>${weekLabel(x.key)}${x.key===idx.currentKey?' <span style="color:var(--text-muted);font-size:11px;">текущая</span>':''}</td>
+                  <td>${x.starts}${x.notGathered?` <span style="color:var(--text-muted);font-size:11px;">· не собр. ${x.notGathered}</span>`:''}</td>
+                  <td>${x.outcomeGroups}${x.pendingGroups?` <span style="color:var(--text-muted);font-size:11px;">· ждут ${x.pendingGroups}</span>`:''}</td>
+                  <td>${x.outcomeGroups?`${x.day1} → ${x.finalCount}`:'—'}</td>
+                  <td>${x.conv1to5!=null?`<span class="badge ${pctBadgeClass(x.conv1to5)}">${x.conv1to5}%</span>`:'—'}</td>
+                  <td>${x.outcomeGroups?x.leftSelf:'—'}</td>
+                  <td>${x.outcomeGroups?x.refused:'—'}</td>
+                  <td>${x.outcomeGroups?x.transferred:'—'}</td>
+                  <td>${x.fellApart}</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+          <div class="footnote">«Ждут» — группы, у которых дата выхода приходится на эту неделю, но ещё не наступила. Полная история недель — в «Экспорт CSV».</div>
+        </div>
+      </div>
+    </details>
+  </div>`;
+
+  mount(html);
+
+  if(s.outcomeGroups || s.progress.groups) renderWeekFunnel('weekFunnel', s);
+  const drawChart = () => renderWeekTrendChart('weekTrendChart', trend);
+  if(weekDetailsOpen) drawChart(); else destroyChart('weekTrendChart');
+  el('weekMore').addEventListener('toggle', e=>{
+    weekDetailsOpen = e.target.open;
+    if(weekDetailsOpen) drawChart(); else destroyChart('weekTrendChart');
+  });
+
+  const go = k => { if(!k) return; periodWeek = k; renderWeeksTab(); syncUrl({ tab:'weeks', week:k }); };
+  el('weekPrev').addEventListener('click', ()=>go(prevKey));
+  el('weekNext').addEventListener('click', ()=>go(nextKey));
+  el('weekSelect').addEventListener('change', e=>go(e.target.value));
+  el('weekCurrent').addEventListener('click', ()=>go(idx.currentKey));
+  if(el('weekTypeSelect')) el('weekTypeSelect').addEventListener('change', e=>{ weekTypeFilter = e.target.value; renderWeeksTab(); });
+  el('copyWeekLink').addEventListener('click', async ()=>{
+    syncUrl({ tab:'weeks', week:key, trainer:'', month:'' });
+    try{
+      await navigator.clipboard.writeText(location.href);
+      el('copyWeekLink').textContent = 'Скопировано';
+      setTimeout(()=>{ if(el('copyWeekLink')) el('copyWeekLink').textContent = 'Ссылка'; }, 1500);
+    }catch(_){
+      prompt('Скопируй ссылку:', location.href);
+    }
+  });
+  document.querySelectorAll('#panel-weeks .wk-card[data-trainer], #weekGroupsTable tr[data-trainer], #weekTrainersTable tr[data-trainer]').forEach(node=>{
+    node.addEventListener('click', ()=>openTrainerDetail(node.dataset.trainer));
+  });
+  document.querySelectorAll('#weekListTable tr[data-week]').forEach(tr=>{
+    tr.addEventListener('click', ()=>go(tr.dataset.week));
+  });
+}
+
+function renderWeekTrendChart(canvasId, trend){
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId); if(!ctx || typeof Chart==='undefined') return;
+  charts[canvasId] = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: trend.map(x=>ddmm(x.key)),
+      datasets:[
+        { type:'bar', label:'Вышло на линию', data: trend.map(x=>x.finalCount), backgroundColor:'rgba(68,87,232,0.28)', borderRadius:5, yAxisID:'y', order:2 },
+        { type:'line', label:'Конв. 1→5', data: trend.map(x=>x.conv1to5), borderColor:'#12876F', backgroundColor:'#12876F', tension:.3, pointRadius:3, spanGaps:true, yAxisID:'y1', order:1 }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:true, labels:{ boxWidth:10, color:'#5B6472', font:{ size:11 } } } },
+      scales:{
+        y:{ beginAtZero:true, ticks:{ color:'#8E96A3', precision:0 }, grid:{ color:'#EDEFF2' } },
+        y1:{ position:'right', beginAtZero:true, suggestedMax:100, ticks:{ color:'#8E96A3', callback:v=>v+'%' }, grid:{ display:false } },
+        x:{ ticks:{ color:'#8E96A3' }, grid:{ display:false } }
+      }
+    }
+  });
 }
 </script>
 </body>
