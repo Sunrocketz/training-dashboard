@@ -53,7 +53,7 @@ type DashboardPayload = {
 | `groups` | number | **старт групп**: все valid, включая ещё в обучении |
 | `groupsCompleted` / `groupsInProgress` | number | законченные / ещё в обучении |
 | `day1`…`finalCount`, отсев | number | только законченные группы |
-| `notGathered` / `fellApart*` | number | не собралась (вкл. «не набралась») / распалась (вкл. «расформирована»; распалась = законченная) — ADR-021 |
+| `notGathered` / `fellApart*` | number | не собралась (вкл. «не набралась», «не состоялась») / распалась (вкл. «расформирована»; распалась = законченная) — ADR-021 |
 | `conv1to5` | number | взвешенная 1→5 по законченным |
 | `leftSelfRate` / `refuseRate` / `transferRate` | number | % от day1 законченных |
 | `yieldPerGroup` | number | `finalCount / groupsCompleted` |
@@ -126,7 +126,7 @@ UI при фильтре месяца пересчитывает воронку 
 | `startDate` / `lineDate` | string \| null | `yyyy-MM-dd`, таймзона скрипта; UI строит по ним вкладку недель (ADR-020) — формат не менять |
 | `completed` | boolean | `lineDate ≤ сегодня` **или** `fellApart` |
 | `fellApart` | boolean | комментарий содержит «распалась» или «расформирована» |
-| `notGathered` | boolean | v8: «не собралась» / «не набралась» — **не** valid: в суммы, старты, воронку, TQI не входит; UI показывает только счётчиком и карточкой |
+| `notGathered` | boolean | v8: «не собралась» / «не набралась» / «не состоялась» — **не** valid: в суммы, старты, воронку, TQI не входит; UI показывает только счётчиком и карточкой |
 | `comment` | string | v8: колонка R как есть (тип группы: «1-ый уровень», «Force Group», «Сервисная»… или статус); ≤120 символов |
 | day1 / final / conv* | | сырые цифры строки (для действующих в агрегаты не идут) |
 

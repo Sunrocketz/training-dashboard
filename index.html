@@ -438,7 +438,7 @@ function outcomeGroupsOf(groups){ return (groups||[]).filter(groupCompleted); }
 function isNotGathered(g){ return !!(g && g.notGathered); }
 function validGroupsOf(groups){ return (groups||[]).filter(g=>!isNotGathered(g)); }
 function notGatheredGroupsOf(groups){ return (groups||[]).filter(isNotGathered); }
-const GROUP_STATUS_RE = /не\s*(собрал|набрал)|распал|расформир/i;
+const GROUP_STATUS_RE = /не\s*(собрал|набрал|состоял)|распал|расформир/i;
 /** Тип группы из колонки R («1-ый уровень», «Force Group», «Сервисная»…). Статусные фразы — не тип, их показывает статус. */
 function groupTypeOf(g){
   const c = String((g && g.comment) || '').trim();
