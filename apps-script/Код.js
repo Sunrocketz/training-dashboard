@@ -36,9 +36,9 @@ var SOURCE_SHEET_NAME = 'Контроль штата обучения'; // на�
 var DASHBOARD_SHEET_NAME = 'Дашборд';               // название листа с результатом внутри таблицы
 var DATA_START_ROW = 1;   // с какой строки начинать чтение
 var DATA_END_ROW = 500;   // до какой строки читать (с запасом)
-var LAST_COLUMN = 'R';    // последняя колонка с данными
-var API_CACHE_KEY = 'dashboard_json_v8';
-var COMMENT_MAX_LEN = 120; // колонка R в groups[].comment — обрезаем на всякий случай
+// Колонки ищем по НАЗВАНИЯМ заголовков (ADR-022), а не по буквам — перестановка колонок в листе дашборд не ломает.
+var API_CACHE_KEY = 'dashboard_json_v9';
+var COMMENT_MAX_LEN = 120; // колонка «Комментарий» в groups[].comment — обрезаем на всякий случай
 var API_CACHE_TTL_SEC = 300; // 5 минут — повторные открытия дашборда без пересчёта листа
 
 // Журнал «Выход на линию — ОС» (другая книга). Нужен доступ «Читатель» у аккаунта деплоера.
@@ -50,12 +50,46 @@ var LINE_REVIEW_LAST_COLUMN = 'M';
 var DEPARTED_TRAINERS = ['Селиванова Олеся', 'Вовчак Лариса', 'Фишер Артем'];
 // =================================================================
 
+// Внутренний (канонический) порядок полей строки. Это НЕ буквы листа: строка листа раскладывается
+// в этот порядок функцией readSourceRows() по заголовкам. Остальной код читает row[COL.x].
 var COL = {
   monthGroup: 0, trainer: 1, startDate: 2, lineDate: 3, day1: 4,
   leftSelf: 5, leftSelfPct: 6, refused: 7, refusedPct: 8,
   transferred: 9, transferredPct: 10, day2Start: 11, conv2: 12,
-  finalCount: 13, conv1to5: 14, day3Start: 15, conv3: 16, comment: 17
+  finalCount: 13, conv1to5: 14, day3Start: 15, conv3: 16, comment: 17,
+  day4Start: 18, conv4: 19, exitCount: 20, exitPct: 21
 };
+var COL_COUNT = 22;
+
+// Заголовок листа → поле. Сравниваем нормализованный текст (нижний регистр, ё=е, пробелы схлопнуты),
+// поэтому хвосты вроде «(ПЛАН 37%)» и переносы строк не мешают. Порядок проверки важен: первое совпадение.
+var HEADER_PATTERNS = [
+  ['monthGroup', /^месяц,\s*группа/],
+  ['trainer', /^тренер группы/],
+  ['startDate', /^дата старта/],
+  ['lineDate', /^дат[ьа] выхода/],              // в листе опечатка «Дать выхода на линию»
+  ['day1', /вышло на 1-?[ыо]?й день/],
+  ['leftSelfPct', /^% ушли сами/],
+  ['leftSelf', /ушли сами/],
+  ['refusedPct', /^% отказа/],
+  ['refused', /отказали мы/],
+  ['transferredPct', /^% переноса/],
+  ['transferred', /перенесли/],
+  ['conv2', /конверси\S* с 2-го дня/],
+  ['day2Start', /начало 2-го дня/],
+  ['conv3', /конверси\S* с 3-го дня/],
+  ['day3Start', /начало 3-го дня/],
+  ['conv4', /конверси\S* с 4-го дня/],
+  ['day4Start', /начало 4-го дня/],
+  ['conv1to5', /^% с 1-го по 5/],
+  ['finalCount', /выход группы на линию/],       // итог «Сколько людей на выход группы на линию»
+  ['exitPct', /^% на выход/],
+  ['exitCount', /^количество людей на выход/],
+  ['comment', /^комментари/]
+];
+// Без этих колонок считать нельзя — лучше упасть с понятной ошибкой, чем отдать неверные цифры.
+var REQUIRED_COLUMNS = ['monthGroup', 'trainer', 'startDate', 'lineDate', 'day1', 'leftSelf',
+  'refused', 'transferred', 'day2Start', 'day3Start', 'finalCount', 'comment'];
 
 var LINE_COL = {
   employee: 0, // A — ФИО, в JSON не отдаём
@@ -83,10 +117,7 @@ function collectDashboardData() {
     throw new Error('Не найден лист "' + SOURCE_SHEET_NAME + '"');
   }
 
-  var lastRow = Math.max(sourceSheet.getLastRow(), DATA_START_ROW);
-  var endRow = Math.min(lastRow, DATA_END_ROW);
-  var range = sourceSheet.getRange('A' + DATA_START_ROW + ':' + LAST_COLUMN + endRow);
-  var values = range.getValues();
+  var values = readSourceRows(sourceSheet);
 
   // validEntry = { row, fellApart, completed }; «не собралась» — вне расчёта (но в groups[] с меткой), «распалась» — в valid с меткой
   var tz = Session.getScriptTimeZone();
@@ -275,7 +306,12 @@ function collectDashboardData() {
       finalCount: Number(row[COL.finalCount]) || 0,
       conv1to5: (function(){ var v = parsePercent(row[COL.conv1to5]); return v !== null ? round1(v*100) : null; })(),
       conv2: (function(){ var v = parsePercent(row[COL.conv2]); return v !== null ? round1(v*100) : null; })(),
-      conv3: (function(){ var v = parsePercent(row[COL.conv3]); return v !== null ? round1(v*100) : null; })()
+      conv3: (function(){ var v = parsePercent(row[COL.conv3]); return v !== null ? round1(v*100) : null; })(),
+      // v9: новые колонки листа (с ноября 2026); у старых групп пусто → null (ADR-022)
+      day4Start: numOrNull(row[COL.day4Start]),
+      conv4: (function(){ var v = parsePercent(row[COL.conv4]); return v !== null ? round1(v*100) : null; })(),
+      exitCount: numOrNull(row[COL.exitCount]),
+      exitPct: (function(){ var v = parsePercent(row[COL.exitPct]); return v !== null ? round1(v*100) : null; })()
     };
   });
 
@@ -329,7 +365,7 @@ function collectDashboardData() {
   trainerList = assignTrainerRanks(trainerList, metricsMeta);
 
   return {
-    schemaVersion: 8,
+    schemaVersion: 9,
     updatedAt: Utilities.formatDate(new Date(), tz, "yyyy-MM-dd'T'HH:mm:ss"),
     metrics: metricsMeta,
     totals: {
@@ -494,7 +530,15 @@ function doGet(e) {
     }
   }
 
-  var data = collectDashboardData();
+  var data;
+  try {
+    data = collectDashboardData();
+  } catch (err) {
+    // Например, переименовали заголовок обязательной колонки — отдаём понятную ошибку вместо HTML-страницы
+    return ContentService
+      .createTextOutput(JSON.stringify({ error: String(err && err.message ? err.message : err) }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
   data.cache = { hit: false, ttlSec: API_CACHE_TTL_SEC };
   var json = JSON.stringify(data);
   try {
@@ -509,8 +553,64 @@ function doGet(e) {
 }
 
 // ======== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ========
+function normalizeHeader(value) {
+  return String(value || '').toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ').trim();
+}
+
+/** Строка заголовков → { поле: индекс колонки листа } или null, если это не строка заголовков. */
+function mapHeaderRow(row) {
+  if (!/^месяц,\s*группа/.test(normalizeHeader(row[0]))) return null;
+  var map = {};
+  for (var c = 0; c < row.length; c++) {
+    var h = normalizeHeader(row[c]);
+    if (!h) continue;
+    for (var p = 0; p < HEADER_PATTERNS.length; p++) {
+      var key = HEADER_PATTERNS[p][0];
+      if (map[key] === undefined && HEADER_PATTERNS[p][1].test(h)) { map[key] = c; break; }
+    }
+  }
+  var missing = REQUIRED_COLUMNS.filter(function(k) { return map[k] === undefined; });
+  if (missing.length) {
+    throw new Error('В листе "' + SOURCE_SHEET_NAME + '" не найдены колонки: ' + missing.join(', ') +
+      '. Проверь названия заголовков (docs/DataModel.md).');
+  }
+  return map;
+}
+
 /**
- * Статус группы по колонке R (регистр не важен). Синонимы (ADR-021):
+ * Читает лист и раскладывает каждую строку в канонический порядок COL по заголовкам.
+ * Заголовки повторяются над каждым блоком месяца — раскладка обновляется на каждом из них.
+ * Строки до первого заголовка и сами заголовки возвращаются пустыми (без даты старта → пропуск).
+ */
+function readSourceRows(sheet) {
+  var lastRow = Math.min(Math.max(sheet.getLastRow(), DATA_START_ROW), DATA_END_ROW);
+  var lastCol = Math.max(sheet.getLastColumn(), 1);
+  var raw = sheet.getRange(DATA_START_ROW, 1, lastRow - DATA_START_ROW + 1, lastCol).getValues();
+  var map = null;
+  var out = [];
+  for (var i = 0; i < raw.length; i++) {
+    var headerMap = mapHeaderRow(raw[i]);
+    var row = new Array(COL_COUNT);
+    for (var k = 0; k < COL_COUNT; k++) row[k] = '';
+    if (headerMap) { map = headerMap; out.push(row); continue; }
+    if (map) {
+      for (var key in map) row[COL[key]] = raw[i][map[key]];
+    }
+    out.push(row);
+  }
+  if (!map) throw new Error('В листе "' + SOURCE_SHEET_NAME + '" не найдена строка заголовков «Месяц, группа».');
+  return out;
+}
+
+/** Пусто ≠ 0: для новых колонок (4-й день, «на выход») у старых групп ячейки пустые → null. */
+function numOrNull(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  var n = Number(value);
+  return isNaN(n) ? null : n;
+}
+
+/**
+ * Статус группы по колонке «Комментарий» (регистр не важен). Синонимы (ADR-021):
  *  «не собралась» / «не набралась» / «не состоялась» → вне расчёта;
  *  «распалась» / «расформирована» → в valid с меткой fellApart.
  * Всё остальное («1-ый уровень», «Force Group», «Сервисная») — тип группы, на расчёт не влияет.

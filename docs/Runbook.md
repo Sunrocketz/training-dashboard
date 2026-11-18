@@ -86,6 +86,13 @@ clasp deploy -i AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNj
 3. Кнопка **Обновить** бьёт в `/exec?refresh=1` и обходит серверный кэш.  
 4. Если всё равно >10с — проверить квоты Apps Script / размер листа / `DATA_END_ROW`.
 
+### В листе поменяли/переставили колонки
+
+1. Скрипт ищет колонки по заголовкам (ADR-022) — перестановка сама по себе ничего не ломает.
+2. Если `/exec` вернул `{ "error": "… не найдены колонки: …" }` (на сайте — «Ошибка в данных таблицы»), значит заголовок обязательной колонки переименовали: поправить заголовок в листе или шаблон в `HEADER_PATTERNS` (`Код.js`) и `docs/DataModel.md`.
+3. Новая колонка, которую надо показать, — шаблон в `HEADER_PATTERNS` + ключ в `COL` + поле в `groups[]` + ApiContract.
+4. Сверка: итоги старых групп не должны измениться (сравнить `groups[]` до/после).
+
 ### Пустые / обрезанные данные
 
 1. Лист называется точно `Контроль штата обучения`?
@@ -122,7 +129,7 @@ clasp login
 
 ## Смоук-чек после релиза
 
-- [ ] `GET /exec` → `schemaVersion: 8`; в `groups[]` есть `comment` и строки с `notGathered: true`; `totals.notGathered` ≈ 13 (9 «не собралась» + 4 «не набралась» на 16.11), `metrics.rankScore: tqi_v3`, есть `totals.lineReview`
+- [ ] `GET /exec` → `schemaVersion: 9`, нет поля `error`; у групп до ноября `day4Start: null`; в `groups[]` есть `comment` и строки с `notGathered: true`; `totals.notGathered` ≈ 13 (9 «не собралась» + 4 «не набралась» на 16.11), `metrics.rankScore: tqi_v3`, есть `totals.lineReview`
 - [ ] `totals.groups` ≥ `groupsCompleted`; `groupsInProgress` = разница; `finalCount` только законченные
 - [ ] KPI: «Всего групп» включает в обучении; «Вышло на линию» и конверсия — без действующих
 - [ ] У тренера: `groupsCompleted`, `yieldPerGroup` = final/законченные; TQI не считает идущие группы

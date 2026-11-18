@@ -1254,6 +1254,7 @@ async function fetchData(url, opts={}){
     const res = await fetch(apiUrl(url, forceRefresh), {cache:'no-store'});
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data = await res.json();
+    if(data && data.error) throw new Error('Ошибка в данных таблицы: ' + data.error);
     if(!data || !data.totals) throw new Error('Некорректный JSON API');
     dashboardData = data;
     saveLocalCache(data);
@@ -1270,7 +1271,8 @@ async function fetchData(url, opts={}){
     console.error('fetchData failed', err);
     if(dashboardData){
       setStatus('live', 'Кэш · нет сети/API');
-      el('dataUpdatedLabel').textContent = formatDataUpdated(dashboardData.updatedAt) + ' · не удалось обновить';
+      const why = err && /^Ошибка в данных/.test(err.message) ? ' — ' + err.message : '';
+      el('dataUpdatedLabel').textContent = formatDataUpdated(dashboardData.updatedAt) + ' · не удалось обновить' + why;
       return;
     }
     setStatus('error', 'Ошибка подключения');

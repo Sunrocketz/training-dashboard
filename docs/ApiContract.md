@@ -5,8 +5,8 @@
 - Endpoint: `GET {WEB_APP_URL}/exec`
 - Content-Type: `application/json`
 - Auth: нет (публичный URL)
-- **schemaVersion:** `8` (текущий)
-- Кэш: Script Cache на 300с (`dashboard_json_v8`); `?refresh=1` принудительно пересчитывает
+- **schemaVersion:** `9` (текущий)
+- Кэш: Script Cache на 300с (`dashboard_json_v9`); `?refresh=1` принудительно пересчитывает
 - В ответе опционально `cache: { hit: boolean, ttlSec: number }`
 
 Текущий deployment ID (URL `/exec`):  
@@ -16,7 +16,7 @@
 
 ```ts
 type DashboardPayload = {
-  schemaVersion: number;      // сейчас 8
+  schemaVersion: number;      // сейчас 9
   updatedAt: string;
   metrics: MetricsMeta;
   totals: Totals;
@@ -127,11 +127,14 @@ UI при фильтре месяца пересчитывает воронку 
 | `completed` | boolean | `lineDate ≤ сегодня` **или** `fellApart` |
 | `fellApart` | boolean | комментарий содержит «распалась» или «расформирована» |
 | `notGathered` | boolean | v8: «не собралась» / «не набралась» / «не состоялась» — **не** valid: в суммы, старты, воронку, TQI не входит; UI показывает только счётчиком и карточкой |
-| `comment` | string | v8: колонка R как есть (тип группы: «1-ый уровень», «Force Group», «Сервисная»… или статус); ≤120 символов |
+| `comment` | string | v8: колонка «Комментарий» (сейчас V) как есть (тип группы: «1-ый уровень», «Force Group», «Сервисная»… или статус); ≤120 символов |
+| `day4Start` / `conv4` | number | null | v9: начало 4-го дня / % конверсии с 4-го дня (колонки «Кол-во на начало 4-го дня», «% Конверсии с 4-го дня»); у старых групп `null` |
+| `exitCount` / `exitPct` | number | null | v9: «Количество людей на выход» / «% на выход от 1-го дня»; у старых групп `null`. **Не** итог — сверочная копия итога, заполняется сотрудниками после выхода группы (может быть 0, пока не внесли); итог по-прежнему `finalCount` |
 | day1 / final / conv* | | сырые цифры строки (для действующих в агрегаты не идут) |
 
 ## Совместимость
 
+- v9: колонки листа ищутся по заголовкам (ADR-022). Новые поля `groups[]`: `day4Start`, `conv4`, `exitCount`, `exitPct` — `number | null` (у групп до ноября 2026 `null`, не 0). Ошибка чтения листа (не найдена обязательная колонка) → ответ `{ error: string }` вместо данных. Кэш `dashboard_json_v9`. Non-breaking для UI v8.
 - v8: `groups[]` содержит и «не собралась» (`notGathered: true`, `completed: false`) — UI обязан исключать их из всех сумм; `groups[].comment` (колонка R как есть, ≤120 симв.); `byMonth[].notGathered`, `byTrainer[].notGathered`; синонимы статусов; кэш `dashboard_json_v8` (ADR-021). Порядок выката: сначала UI (терпит v7 и v8), потом GAS — старый UI посчитал бы «не собралась» как группы в обучении.
 - v7: TQI v3 (балл 1–5 5% + навыки да/нет 5%); кэш `dashboard_json_v7d` (метка «Уволен», ADR-019).
 - v6: `lineReview` у totals/byTrainer + `metrics.lineReview`; кэш `dashboard_json_v6`. TQI без изменений.
