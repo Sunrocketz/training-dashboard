@@ -5,8 +5,8 @@
 - Endpoint: `GET {WEB_APP_URL}/exec`
 - Content-Type: `application/json`
 - Auth: нет (публичный URL)
-- **schemaVersion:** `9` (текущий)
-- Кэш: Script Cache на 300с (`dashboard_json_v9`); `?refresh=1` принудительно пересчитывает
+- **schemaVersion:** `10` (текущий)
+- Кэш: Script Cache на 300с, ключ `dashboard_json_v10`, JSON хранится **частями** (`_n` = число кусков, `_0…` — куски по 45 000 символов; ответ > 100KB, лимит Script Cache — 100KB на ключ, ADR-023); `?refresh=1` принудительно пересчитывает
 - В ответе опционально `cache: { hit: boolean, ttlSec: number }`
 
 Текущий deployment ID (URL `/exec`):  
@@ -16,7 +16,7 @@
 
 ```ts
 type DashboardPayload = {
-  schemaVersion: number;      // сейчас 9
+  schemaVersion: number;      // сейчас 10
   updatedAt: string;
   metrics: MetricsMeta;
   totals: Totals;
@@ -24,6 +24,7 @@ type DashboardPayload = {
   byTrainer: TrainerRow[];
   byMonth: MonthRow[];
   groups: GroupRow[];
+  dismissals: Dismissals;     // v10: уход кандидатов из листа «Регистрация уволенных»
 };
 ```
 
@@ -132,7 +133,43 @@ UI при фильтре месяца пересчитывает воронку 
 | `exitCount` / `exitPct` | number | null | v9: «Количество людей на выход» / «% на выход от 1-го дня»; у старых групп `null`. **Не** итог — сверочная копия итога, заполняется сотрудниками после выхода группы (может быть 0, пока не внесли); итог по-прежнему `finalCount` |
 | day1 / final / conv* | | сырые цифры строки (для действующих в агрегаты не идут) |
 
+## `dismissals` (v10, ADR-023)
+
+Уход кандидатов из листа «Регистрация уволенных» (Google-форма, та же книга). Отдельный учёт: **не** входит в totals / воронку / TQI и не обязан совпадать с «Ушли сами / отказали» основного листа. Компактно: справочники + кортежи строк; UI только считает и рисует.
+
+```ts
+type Dismissals = {
+  ok: boolean;                 // false — лист не прочитан (остальной дашборд работает)
+  error: string | null;
+  categories: { key: string; label: string }[];           // порядок = порядок в UI
+  reasons: { key: string; category: string; label: string }[];
+  initiators: string[];        // ['Сотрудник','Тренер','Компания','Не указан']
+  trainers: string[];          // имена тренеров (каноничные из «Контроль штата»)
+  rows: [number, string, number, number, number, number][];
+  //     [trainerIdx, startDate 'yyyy-MM-dd' | '', day 0..10 (0 = не указан), initiatorIdx, reasonIdx, contacted 1|0|-1]
+  unmatchedTrainers: number;   // строк с тренером, которого нет в обучении (имя берётся из формы как есть)
+  dateFromTimestamp: number;   // строк без даты старта — взята дата отметки времени
+  skipped: number;             // строки без ФИО тренера
+};
+```
+
+| Ключ категории | Причины (`reasons[].key`) |
+|----------------|---------------------------|
+| `personal` | `changedMind`, `family`, `health`, `schedule` |
+| `noshow` | `noShowStart`, `noShowNextDay`, `leftSilent` (только из свободного текста) |
+| `tech` | `internet`, `equipment` |
+| `skills` | `weakSkills`, `reading` |
+| `discipline` | `lateness`, `ethics` |
+| `company` | `companyDecision` |
+| `other` | `reenroll`, `otherText`, `unknown` |
+
+`contacted`: колонка «Связывался ли тренер» — 1 = «Да», 0 = «Нет», −1 = пусто или свой текст. Фильтр месяца в UI — по `startDate` (название месяца совпадает с `byMonth[].month`). Правила раскладки причин — [DataModel.md](DataModel.md#лист-регистрация-уволенных).
+
+Нет в ответе: ФИО, телефон, Telegram, email кандидата, текст ОС, исходный текст причины, «Порекомендуете ли», «Доступы в CRM».
+
 ## Совместимость
+
+- v10: новое поле `dismissals` (non-breaking: UI v9 его не читает; UI v10 при его отсутствии показывает заглушку «нет данных» на вкладке и не рисует блок в обзоре). Кэш `dashboard_json_v10` частями (ADR-023). Порядок выката любой; рекомендуется GAS → UI.
 
 - v9: колонки листа ищутся по заголовкам (ADR-022). Новые поля `groups[]`: `day4Start`, `conv4`, `exitCount`, `exitPct` — `number | null` (у групп до ноября 2026 `null`, не 0). Ошибка чтения листа (не найдена обязательная колонка) → ответ `{ error: string }` вместо данных. Кэш `dashboard_json_v9`. Non-breaking для UI v8.
 - v8: `groups[]` содержит и «не собралась» (`notGathered: true`, `completed: false`) — UI обязан исключать их из всех сумм; `groups[].comment` (колонка R как есть, ≤120 симв.); `byMonth[].notGathered`, `byTrainer[].notGathered`; синонимы статусов; кэш `dashboard_json_v8` (ADR-021). Порядок выката: сначала UI (терпит v7 и v8), потом GAS — старый UI посчитал бы «не собралась» как группы в обучении.

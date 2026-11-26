@@ -8,7 +8,7 @@
 | Branch деплоя UI | `main` |
 | Script ID | `1jNtOi1KDqH0HltJPgBkBbZJKCvvY1191vshAxe3vZjTjquO9QG2bWphZ` |
 | Deployment @HEAD (dev/head) | `AKfycbzjxGv5RjnrwtfceJyD4AfW0GQSHd72PgUbeAcC3KxC` |
-| Deployment веб-UI (/exec, schema v7) | `AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNjs7MKzbt9Fw` |
+| Deployment веб-UI (/exec, schema v10, @21) | `AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNjs7MKzbt9Fw` |
 | Локальный GAS | `apps-script/` |
 
 UI по умолчанию бьёт в **deployment v2** (см. `DEFAULT_APPS_SCRIPT_URL` в `index.html`).
@@ -102,11 +102,19 @@ clasp deploy -i AKfycbwCpZCfhcuynPp0431uiLZactRUvv51as0hdNfTtkHKF69eN1SD_7aBfqNj
 
 ### Нет блока «Оценка после линии» / `lineReview.ok: false`
 
-1. Deployment обновлён после `clasp push` (кэш `dashboard_json_v8`)?
+1. Deployment обновлён после `clasp push` (кэш `dashboard_json_v10`)?
 2. У аккаунта деплоера есть «Читатель» на книгу «Выход на линию — ОС»?
 3. Первый запуск после кода: в редакторе Apps Script выполнить `collectDashboardData` и выдать доступ к Sheets (openById).
 4. Лист называется точно `2026`?
 5. `unmatched` большой — имена в журнале не клеятся с «Контроль штата» (фамилия + имя; `ё` уже равен `е`).
+
+### Вкладка «Уход кандидатов» пустая / `dismissals.ok: false`
+
+1. В ответе `schemaVersion: 10`? Нет — не обновлён deployment (UI на v9 показывает заглушку).
+2. `dismissals.error` «не найден лист» — лист переименовали; вернуть имя или поменять `DISMISSALS_SHEET_NAME`.
+3. «не найдены колонки: …» — в форме переименовали вопрос; поправить шаблон в `DISMISSAL_HEADER_PATTERNS` + DataModel.
+4. Много «Другое (свой текст)» — появились новые формулировки; дополнить `DISMISSAL_TEXT_RULES` (ADR-023, DataModel).
+5. `unmatchedTrainers` > 0 — ФИО тренера в форме не совпало с «Контроль штата» по фамилии + имени.
 
 ### Неверные конверсии
 
@@ -129,7 +137,9 @@ clasp login
 
 ## Смоук-чек после релиза
 
-- [ ] `GET /exec` → `schemaVersion: 9`, нет поля `error`; у групп до ноября `day4Start: null`; в `groups[]` есть `comment` и строки с `notGathered: true`; `totals.notGathered` ≈ 13 (9 «не собралась» + 4 «не набралась» на 16.11), `metrics.rankScore: tqi_v3`, есть `totals.lineReview`
+- [ ] `GET /exec` → `schemaVersion: 10`, `dismissals.ok: true`, `dismissals.rows` ≈ числу строк формы (665 на 26.11), `unmatchedTrainers: 0`; повторный запрос в течение 5 мин → `cache.hit: true` (кэш частями)
+- [ ] Вкладка «Уход кандидатов»: KPI, дни с разбивкой (переключатель причины / инициатор), выводы, таблица «причина × день» со всеми причинами, тренеры (клик = фильтр), месяцы старта; фильтр месяца сверху режет по дате старта; CSV `dismissals_*.csv`; в «Обзоре» блок «Уход кандидатов: когда и почему» с кнопкой на вкладку; в карточке тренера — блок «Уход кандидатов»; в ответе нет ФИО/телефонов кандидатов
+- [ ] `GET /exec` → нет поля `error`; у групп до ноября `day4Start: null`; в `groups[]` есть `comment` и строки с `notGathered: true`; `totals.notGathered` ≈ 13 (9 «не собралась» + 4 «не набралась» на 16.11), `metrics.rankScore: tqi_v3`, есть `totals.lineReview`
 - [ ] `totals.groups` ≥ `groupsCompleted`; `groupsInProgress` = разница; `finalCount` только законченные
 - [ ] KPI: «Всего групп» включает в обучении; «Вышло на линию» и конверсия — без действующих
 - [ ] У тренера: `groupsCompleted`, `yieldPerGroup` = final/законченные; TQI не считает идущие группы

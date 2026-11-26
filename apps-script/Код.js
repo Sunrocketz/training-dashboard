@@ -37,7 +37,8 @@ var DASHBOARD_SHEET_NAME = 'Дашборд';               // название �
 var DATA_START_ROW = 1;   // с какой строки начинать чтение
 var DATA_END_ROW = 500;   // до какой строки читать (с запасом)
 // Колонки ищем по НАЗВАНИЯМ заголовков (ADR-022), а не по буквам — перестановка колонок в листе дашборд не ломает.
-var API_CACHE_KEY = 'dashboard_json_v9';
+var API_CACHE_KEY = 'dashboard_json_v10';
+var API_CACHE_CHUNK_CHARS = 45000; // кэш режем на куски: лимит 100KB на ключ, кириллица — 2 байта на символ (ADR-023)
 var COMMENT_MAX_LEN = 120; // колонка «Комментарий» в groups[].comment — обрезаем на всякий случай
 var API_CACHE_TTL_SEC = 300; // 5 минут — повторные открытия дашборда без пересчёта листа
 
@@ -48,6 +49,11 @@ var LINE_REVIEW_DATA_END_ROW = 500;
 var LINE_REVIEW_LAST_COLUMN = 'M';
 // Уволенные: остаются в рейтинге и линии, в UI метка «(Уволен)» (ADR-019).
 var DEPARTED_TRAINERS = ['Селиванова Олеся', 'Вовчак Лариса', 'Фишер Артем'];
+
+// Лист «Регистрация уволенных» (та же книга, Google-форма) — уход кандидатов (ADR-023).
+// Берём только тренера, дату старта, инициатора, день, причину и «связывался ли тренер». ПДн кандидатов не читаем.
+var DISMISSALS_SHEET_NAME = 'Регистрация уволенных';
+var DISMISSALS_DATA_END_ROW = 5000;
 // =================================================================
 
 // Внутренний (канонический) порядок полей строки. Это НЕ буквы листа: строка листа раскладывается
@@ -364,8 +370,13 @@ function collectDashboardData() {
   });
   trainerList = assignTrainerRanks(trainerList, metricsMeta);
 
+  // Уход кандидатов: имена тренеров склеиваем с обучением (включая тех, у кого только «не собралась»)
+  var dismissalNames = {};
+  allEntries.forEach(function(entry) { dismissalNames[normalizeName(entry.row[COL.trainer])] = true; });
+  var dismissals = collectDismissals(Object.keys(dismissalNames), tz);
+
   return {
-    schemaVersion: 9,
+    schemaVersion: 10,
     updatedAt: Utilities.formatDate(new Date(), tz, "yyyy-MM-dd'T'HH:mm:ss"),
     metrics: metricsMeta,
     totals: {
@@ -401,7 +412,8 @@ function collectDashboardData() {
     ],
     byTrainer: trainerList,
     byMonth: monthList,
-    groups: groupList
+    groups: groupList,
+    dismissals: dismissals
   };
 }
 
@@ -516,7 +528,7 @@ function doGet(e) {
   var cache = CacheService.getScriptCache();
 
   if (!forceRefresh) {
-    var cached = cache.get(API_CACHE_KEY);
+    var cached = cacheGetChunked(cache, API_CACHE_KEY);
     if (cached) {
       try {
         var cachedData = JSON.parse(cached);
@@ -542,14 +554,39 @@ function doGet(e) {
   data.cache = { hit: false, ttlSec: API_CACHE_TTL_SEC };
   var json = JSON.stringify(data);
   try {
-    // Script Cache ~100KB/ключ; наш payload сейчас заметно меньше
-    cache.put(API_CACHE_KEY, json, API_CACHE_TTL_SEC);
+    cachePutChunked(cache, API_CACHE_KEY, json, API_CACHE_TTL_SEC);
   } catch (ignorePut) {
     // если не влезло — просто отдаём без кэша
   }
   return ContentService
     .createTextOutput(json)
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/** Script Cache держит ≤100KB на ключ, а ответ уже около 100KB — кладём частями: key_n = число кусков, key_0…key_{n-1}. */
+function cachePutChunked(cache, key, text, ttl) {
+  var parts = {};
+  var n = 0;
+  for (var i = 0; i < text.length; i += API_CACHE_CHUNK_CHARS) {
+    parts[key + '_' + n] = text.slice(i, i + API_CACHE_CHUNK_CHARS);
+    n++;
+  }
+  parts[key + '_n'] = String(n);
+  cache.putAll(parts, ttl);
+}
+
+function cacheGetChunked(cache, key) {
+  var n = Number(cache.get(key + '_n'));
+  if (!n) return null;
+  var keys = [];
+  for (var i = 0; i < n; i++) keys.push(key + '_' + i);
+  var got = cache.getAll(keys);
+  var out = '';
+  for (var j = 0; j < n; j++) {
+    if (got[keys[j]] == null) return null; // кусок истёк раньше остальных — пересчитаем
+    out += got[keys[j]];
+  }
+  return out;
 }
 
 // ======== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ========
@@ -1058,4 +1095,206 @@ function computeTrainerScore(t, metricsMeta, ctx) {
       stability: round1(stability)
     }
   };
+}
+
+// ======================================================
+// ЧАСТЬ 4: уход кандидатов — лист «Регистрация уволенных» (ADR-023)
+// ======================================================
+
+// Категории и причины. Порядок = порядок в UI. Ключи — контракт с фронтом (docs/ApiContract.md).
+var DISMISSAL_CATEGORIES = [
+  { key: 'personal', label: 'Личные обстоятельства' },
+  { key: 'noshow', label: 'Не вышли / ушли без ОС' },
+  { key: 'tech', label: 'Технические проблемы' },
+  { key: 'skills', label: 'Успеваемость и навыки' },
+  { key: 'discipline', label: 'Дисциплина и нарушения' },
+  { key: 'company', label: 'Решение компании' },
+  { key: 'other', label: 'Прочее' }
+];
+var DISMISSAL_REASONS = [
+  { key: 'changedMind', category: 'personal', label: 'Передумал / «это не моё»' },
+  { key: 'family', category: 'personal', label: 'Личные / семейные обстоятельства' },
+  { key: 'health', category: 'personal', label: 'Проблемы со здоровьем' },
+  { key: 'schedule', category: 'personal', label: 'График / другая работа / учёба' },
+  { key: 'noShowStart', category: 'noshow', label: 'Не пришёл после распределения' },
+  { key: 'noShowNextDay', category: 'noshow', label: 'Не вышел на следующий день' },
+  { key: 'leftSilent', category: 'noshow', label: 'Ушёл во время обучения без ОС' },
+  { key: 'internet', category: 'tech', label: 'Интернет, свет, ПК' },
+  { key: 'equipment', category: 'tech', label: 'Оборудование (микрофон, гарнитура, камера)' },
+  { key: 'weakSkills', category: 'skills', label: 'Не справляется / слабые навыки' },
+  { key: 'reading', category: 'skills', label: 'Плохое чтение / грамотность' },
+  { key: 'lateness', category: 'discipline', label: 'Опоздания, прогулы' },
+  { key: 'ethics', category: 'discipline', label: 'Хамство / нарушение этики' },
+  { key: 'companyDecision', category: 'company', label: 'Решение компании / тренера' },
+  { key: 'reenroll', category: 'other', label: 'Перезапись на другой поток' },
+  { key: 'otherText', category: 'other', label: 'Другое (свой текст)' },
+  { key: 'unknown', category: 'other', label: 'Не указано' }
+];
+var DISMISSAL_INITIATORS = ['Сотрудник', 'Тренер', 'Компания', 'Не указан'];
+
+var DISMISSAL_HEADER_PATTERNS = [
+  ['timestamp', /^отметка времени/],
+  ['trainer', /^фио тренера/],
+  ['startDate', /^дата старта/],
+  ['initiator', /инициатор/],
+  ['day', /на какой день/],
+  ['reason', /^причина ухода/],
+  ['contacted', /связывался ли тренер/]
+];
+var DISMISSAL_REQUIRED = ['trainer', 'initiator', 'day', 'reason'];
+
+// Пункты выпадающего списка формы («💭 ЛО: Передумал / «Это не моё»» и т.п.). Проверяются по порядку.
+var DISMISSAL_DROPDOWN_RULES = [
+  ['changedMind', /передумал|не мое/],
+  ['family', /семейн/],
+  ['health', /здоров/],
+  ['schedule', /график|другая работа/],
+  ['equipment', /оборудован|микрофон|гарнитур/],
+  ['internet', /технические проблемы|интернет|свет/],
+  ['weakSkills', /не справляется|слабые навыки/],
+  ['reading', /чтение|грамотност/],
+  ['ethics', /хамск|этик/],
+  ['lateness', /дисциплин|опоздан|прогул/],
+  ['companyDecision', /решение компании/]
+];
+// Свободный текст тренера (≈30% строк) раскладываем по ключевым словам, чтобы не потерять самые частые случаи.
+// Порядок важен: сначала конкретные причины, затем «не вышел на N-й день», «не пришёл», «ушёл без ОС».
+var DISMISSAL_TEXT_RULES = [
+  ['unknown', /^(-+|—|неизвестно|нет данных)?$/],
+  ['internet', /свет|интернет|электрич|выбивал/],
+  ['ethics', /обманыва|дурим|хам|угрожа/],
+  ['lateness', /опозд|опаздыва|проспал/],
+  ['weakSkills', /скрипт|crm|срм|слаб|не понима/],          // в т.ч. «слабый, рекомендуется переобучение» — причина в навыках
+  ['companyDecision', /прекраща|не допущ/],
+  ['reenroll', /перезапис|переобуч/],
+  ['changedMind', /не подход|подхдит|не мое|не смогу|не захотел|нет желания|не интерес|услови|исходящ|мотивац|не будет продолжать|думала,? что|спать/],
+  ['schedule', /график|работ[еауы]|учеб|совмещ|отъезд/],
+  ['family', /по личным|семейн/],
+  ['noShowNextDay', /(втор|трет|четв[её]рт|пят|[2-5])\S*\s*(день|дн)/],
+  ['noShowStart', /распред|рапсред|распреж|рапсоед|не пере[шщ]|не подключ|не явил|не присоедин|не пришл|не пришел|не зашл|не зашел|не было|не видела|не помню|не авил|не вышел на обучение/],
+  ['leftSilent', /без ос|нет ос|без ответа|игнор|молча|вышл|вышел|покинул|ушл|ушел|не вернул|пропал|выпал|не отвеча|не читает|поняла/]
+];
+
+function dismissalReasonKey(value) {
+  var raw = foldYo(String(value || '')).toLowerCase().replace(/\s+/g, ' ').trim();
+  var text = raw.replace(/^[^a-zа-я0-9-]+/, '').trim(); // срезаем эмодзи и знаки перед текстом
+  var i;
+  if (/^(ло|тп|навыки|дисциплина|компания)\s*:/.test(text)) {
+    for (i = 0; i < DISMISSAL_DROPDOWN_RULES.length; i++) {
+      if (DISMISSAL_DROPDOWN_RULES[i][1].test(text)) return DISMISSAL_DROPDOWN_RULES[i][0];
+    }
+    return 'otherText';
+  }
+  for (i = 0; i < DISMISSAL_TEXT_RULES.length; i++) {
+    if (DISMISSAL_TEXT_RULES[i][1].test(text)) return DISMISSAL_TEXT_RULES[i][0];
+  }
+  return 'otherText';
+}
+
+function dismissalInitiatorIndex(value) {
+  var s = String(value || '').trim().toLowerCase();
+  if (/сотрудник|кандидат/.test(s)) return 0;
+  if (/тренер/.test(s)) return 1;
+  if (/компан/.test(s)) return 2;
+  return 3;
+}
+
+/** «День 3» → 3; пусто/непонятно → 0. */
+function dismissalDay(value) {
+  if (typeof value === 'number') return value >= 1 && value <= 10 ? Math.round(value) : 0;
+  var m = String(value || '').match(/(\d+)/);
+  if (!m) return 0;
+  var n = Number(m[1]);
+  return n >= 1 && n <= 10 ? n : 0;
+}
+
+/** Дата старта: Date из листа или строка «dd.MM.yyyy» → 'yyyy-MM-dd'. */
+function dismissalDateKey(value, tz) {
+  if (value instanceof Date) return Utilities.formatDate(value, tz, 'yyyy-MM-dd');
+  var m = String(value || '').match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  if (!m) return '';
+  return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+}
+
+/**
+ * Компактный набор для UI: справочники + строки-кортежи
+ * [trainerIdx, startDate 'yyyy-MM-dd' | '', day 0..10, initiatorIdx, reasonIdx, contacted 1|0|-1].
+ * Ошибка листа не роняет дашборд: ok=false и пустые rows.
+ */
+function collectDismissals(canonicalNames, tz) {
+  var base = {
+    ok: false, error: null,
+    categories: DISMISSAL_CATEGORIES,
+    reasons: DISMISSAL_REASONS,
+    initiators: DISMISSAL_INITIATORS,
+    trainers: [], rows: [],
+    unmatchedTrainers: 0, dateFromTimestamp: 0, skipped: 0
+  };
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DISMISSALS_SHEET_NAME);
+    if (!sheet) { base.error = 'не найден лист «' + DISMISSALS_SHEET_NAME + '»'; return base; }
+    var lastRow = Math.min(sheet.getLastRow(), DISMISSALS_DATA_END_ROW);
+    var lastCol = Math.max(sheet.getLastColumn(), 1);
+    if (lastRow < 2) { base.ok = true; return base; }
+    var values = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+
+    var map = {};
+    values[0].forEach(function(cell, c) {
+      var h = normalizeHeader(cell);
+      if (!h) return;
+      for (var p = 0; p < DISMISSAL_HEADER_PATTERNS.length; p++) {
+        var key = DISMISSAL_HEADER_PATTERNS[p][0];
+        if (map[key] === undefined && DISMISSAL_HEADER_PATTERNS[p][1].test(h)) { map[key] = c; break; }
+      }
+    });
+    var missing = DISMISSAL_REQUIRED.filter(function(k) { return map[k] === undefined; });
+    if (missing.length) {
+      base.error = 'в листе «' + DISMISSALS_SHEET_NAME + '» не найдены колонки: ' + missing.join(', ');
+      return base;
+    }
+
+    var keyToName = {};
+    (canonicalNames || []).forEach(function(name) {
+      var k = trainerMatchKey(name);
+      if (k && !keyToName[k]) keyToName[k] = name;
+    });
+    var reasonIndex = {};
+    DISMISSAL_REASONS.forEach(function(r, i) { reasonIndex[r.key] = i; });
+    var trainerIdx = {};
+
+    for (var i = 1; i < values.length; i++) {
+      var row = values[i];
+      var trainerRaw = row[map.trainer];
+      var reasonRaw = row[map.reason];
+      var dayRaw = row[map.day];
+      if (!String(trainerRaw || '').trim() && !String(reasonRaw || '').trim() && !String(dayRaw || '').trim()) continue;
+      var tKey = trainerMatchKey(trainerRaw);
+      if (!tKey) { base.skipped++; continue; }
+      var name = keyToName[tKey];
+      if (!name) { name = normalizeName(trainerRaw); base.unmatchedTrainers++; }
+      if (trainerIdx[name] === undefined) { trainerIdx[name] = base.trainers.length; base.trainers.push(name); }
+
+      // Дата старта группы, а не отметка времени: тренеры заполняют форму с опозданием
+      var date = map.startDate !== undefined ? dismissalDateKey(row[map.startDate], tz) : '';
+      if (!date && map.timestamp !== undefined) {
+        date = dismissalDateKey(row[map.timestamp], tz);
+        if (date) base.dateFromTimestamp++;
+      }
+      var contacted = map.contacted !== undefined ? parseYesNo(row[map.contacted]) : null;
+      base.rows.push([
+        trainerIdx[name],
+        date,
+        dismissalDay(dayRaw),
+        dismissalInitiatorIndex(row[map.initiator]),
+        reasonIndex[dismissalReasonKey(reasonRaw)],
+        contacted === true ? 1 : (contacted === false ? 0 : -1)
+      ]);
+    }
+    base.ok = true;
+    return base;
+  } catch (err) {
+    base.error = err && err.message ? String(err.message) : String(err);
+    base.rows = [];
+    return base;
+  }
 }

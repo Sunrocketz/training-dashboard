@@ -81,7 +81,8 @@
   #config .hint{width:100%; font-size:12px; color:var(--text-muted); margin-top:2px;}
 
   /* ---- tabs ---- */
-  .tabs{display:flex; gap:4px; margin-bottom:20px; background:var(--surface-2); border-radius:10px; padding:4px; width:fit-content;}
+  .tabs{display:flex; gap:4px; margin-bottom:20px; background:var(--surface-2); border-radius:10px; padding:4px; width:fit-content; max-width:100%; overflow-x:auto;}
+  .tab-btn{flex-shrink:0;}
   .tab-btn{
     font-family:var(--font-body); font-size:var(--fs-meta); font-weight:600; color:var(--text-secondary);
     background:transparent; border:none; border-radius:7px; padding:8px 16px; cursor:pointer;
@@ -335,6 +336,42 @@
   .toolbar label{font-size:var(--fs-meta); font-weight:600; color:var(--text-secondary);}
   #periodHint{font-size:var(--fs-meta); color:var(--text-muted); max-width:420px; line-height:1.35;}
 
+  /* ---- уход кандидатов (лист «Регистрация уволенных», ADR-023) ---- */
+  .dm-legend{display:flex; flex-wrap:wrap; gap:6px 14px; font-size:var(--fs-meta); color:var(--text-secondary); margin-bottom:12px;}
+  .dm-legend span{display:inline-flex; align-items:center; gap:6px;}
+  .dm-sw{display:inline-block; width:10px; height:10px; border-radius:3px; flex-shrink:0;}
+  .dm-bars{display:flex; flex-direction:column; gap:8px;}
+  .dm-bar-row{display:grid; grid-template-columns:110px 1fr 104px; gap:12px; align-items:center;}
+  .dm-bar-label{font-size:var(--fs-meta); font-weight:600; color:var(--text-secondary); line-height:1.25;}
+  .dm-bar-track{height:26px; background:var(--surface-2); border-radius:6px; overflow:hidden;}
+  .dm-bar-fill{height:100%; display:flex; gap:2px; min-width:4px;}
+  .dm-bar-fill > i{display:block; height:100%; min-width:2px;}
+  .dm-bar-fill > i:first-child{border-radius:4px 0 0 4px;}
+  .dm-bar-fill > i:last-child{border-radius:0 4px 4px 0;}
+  .dm-bar-fill > i:only-child{border-radius:4px;}
+  .dm-bar-val{font-family:var(--font-mono); font-size:12px; text-align:right; color:var(--text-primary); white-space:nowrap;}
+  .dm-bar-val span{color:var(--text-muted);}
+  .dm-reasons{display:flex; flex-direction:column; gap:2px;}
+  .dm-cat{display:flex; justify-content:space-between; gap:10px; align-items:center; margin-top:10px; padding:6px 0 4px; border-bottom:1px solid var(--border-soft); font-weight:700; font-size:13px;}
+  .dm-cat:first-child{margin-top:0;}
+  .dm-cat .num{font-family:var(--font-mono); font-size:12px;}
+  .dm-reason{display:grid; grid-template-columns:minmax(150px, 1.5fr) 1fr 92px; gap:10px; align-items:center; padding:4px 0 4px 16px; font-size:13px; color:var(--text-secondary);}
+  .dm-reason .mini-track{height:8px; background:var(--surface-2); border-radius:4px; overflow:hidden;}
+  .dm-reason .mini-track > i{display:block; height:100%; border-radius:4px;}
+  .dm-reason .num{font-family:var(--font-mono); font-size:12px; text-align:right; color:var(--text-primary); white-space:nowrap;}
+  .dm-reason .num span{color:var(--text-muted);}
+  .dm-heat td.h{text-align:center; min-width:54px;}
+  .dm-heat td.h b{font-weight:600;}
+  .dm-heat td.h small{display:block; font-size:10px; color:var(--text-muted);}
+  .dm-heat tr.dm-cat-row td{background:var(--surface-2); font-family:var(--font-body); font-weight:700; color:var(--text-primary);}
+  .dm-heat tr.dm-cat-row td.h{font-family:var(--font-mono);}
+  .dm-heat tbody tr{cursor:default;}
+  .dm-heat td.rl{white-space:normal; min-width:220px; font-weight:500; padding-left:22px;}
+  .dm-seg{display:inline-flex; background:var(--surface-2); border-radius:8px; padding:3px; gap:2px;}
+  .dm-seg button{font-family:var(--font-body); font-size:12px; font-weight:600; color:var(--text-secondary); background:transparent; border:none; border-radius:6px; padding:6px 10px; cursor:pointer;}
+  .dm-seg button.on{background:var(--surface); color:var(--text-primary); box-shadow:var(--shadow);}
+  @media (max-width:600px){ .dm-bar-row{grid-template-columns:70px 1fr 84px;} .dm-reason{grid-template-columns:1fr 70px; } .dm-reason .mini-track{display:none;} }
+
   @media (max-width:900px){
     .kpi-grid{grid-template-columns:repeat(2,1fr);}
     .two-col, .three-col{grid-template-columns:1fr;}
@@ -376,6 +413,7 @@
     <button class="tab-btn" data-tab="trainers">По тренерам</button>
     <button class="tab-btn" data-tab="months">По месяцам</button>
     <button class="tab-btn" data-tab="weeks">По неделям</button>
+    <button class="tab-btn" data-tab="dismissals">Уход кандидатов</button>
   </div>
 
   <div class="toolbar" id="toolbar" style="display:none;">
@@ -418,6 +456,16 @@ let pendingDeepLink = null;
 let deepLinkApplied = false;
 const DAY_MS = 24*60*60*1000;
 const WEEK_TREND_LEN = 12; // сколько недель в тренде вкладки «По неделям»
+// Все const/let — здесь, вверху: renderAll из локального кэша вызывается до конца разбора скрипта (иначе TDZ-ошибка)
+const WEEKDAY_SHORT = ['вс','пн','вт','ср','чт','пт','сб'];
+// Вкладка «Уход кандидатов» (ADR-023)
+const RU_MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+// Категории — фиксированный порядок оттенков (проверены валидатором палитры на CVD); «Прочее» — нейтральный серый
+const DM_CAT_COLORS = { personal:'#2a78d6', noshow:'#eb6834', tech:'#1baf7a', skills:'#eda100', discipline:'#e87ba4', company:'#008300', other:'#A3AAB5' };
+const DM_INIT_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#A3AAB5']; // сотрудник, тренер, компания, не указан
+const DM_MIN_TRAINER_ROWS = 10; // ниже — тренера не сравниваем со средним (мало записей)
+let dmTrainer = '';          // фильтр тренера на вкладке ('' = все)
+let dmBreak = 'category';    // разбивка дней: 'category' | 'initiator'
 const el = (id) => document.getElementById(id);
 let charts = {};
 
@@ -1062,6 +1110,10 @@ function exportActiveTabCsv(){
     downloadCsv(`trainers_${stamp}.csv`, rows);
     return;
   }
+  if(tab === 'dismissals'){
+    downloadCsv(`dismissals_${stamp}.csv`, dismissalsCsvRows());
+    return;
+  }
   if(tab === 'weeks'){
     const idx = buildWeeksIndex(weekScopedGroups());
     const key = resolveWeekKey(idx);
@@ -1157,6 +1209,7 @@ function applyPendingDeepLink(){
   renderTrainersTab(viewData);
   renderMonthsTab(viewData);
   renderWeeksTab();
+  renderDismissalsTab();
   const tab = link.tab || (link.trainer ? 'trainers' : link.month ? 'months' : link.week ? 'weeks' : 'overview');
   activateTab(tab);
   initTabsOnce();
@@ -1191,6 +1244,7 @@ function renderAll(){
   renderTrainersTab(viewData);
   renderMonthsTab(viewData);
   renderWeeksTab();
+  renderDismissalsTab();
   activateTab(activeTab);
   initTabsOnce();
   if(!deepLinkApplied && hasDeepLinkIntent(pendingDeepLink)) applyPendingDeepLink();
@@ -1429,6 +1483,7 @@ function renderOverview(data){
       <div class="kpi-card"><div class="scope">${scope}</div><div class="label">Отказали / перенесли</div><div class="value">${t.refused} / ${t.transferred}</div><div class="sub">${insights.refuseRate}% / ${insights.transferRate}% от day1</div>${refusedDelta}</div>
     </div>
     ${renderLineReviewSection(data)}
+    ${renderDismissalsOverviewSection()}
     <div class="two-col">
       <div class="section">
         <div class="section-head"><h2>Сильные стороны</h2><div class="desc">Что уже работает в текущей области</div></div>
@@ -1539,6 +1594,8 @@ function renderOverview(data){
   document.querySelectorAll('#lineReviewTable tr[data-trainer]').forEach(tr=>{
     tr.addEventListener('click', ()=>openTrainerDetail(tr.dataset.trainer));
   });
+  const dmOpen = el('dmOpenTab');
+  if(dmOpen) dmOpen.addEventListener('click', ()=>{ activateTab('dismissals'); syncUrl({ tab:'dismissals' }); window.scrollTo({ top:0, behavior:'smooth' }); });
 }
 
 function trainerConv(t){
@@ -1828,6 +1885,7 @@ function openTrainerDetail(name, opts={}){
       <div class="mini-kpi"><div class="label">Конв. 3→5</div><div class="value">${trainer.conv3!=null?trainer.conv3+'%':'—'}</div></div>
     </div>
     ${renderTrainerLineReviewBlock(trainer)}
+    ${renderTrainerDismissalsBlock(name, scopeMonth)}
     <div class="footnote" style="margin:-2px 0 14px;">Область: ${scopeMonth?`месяц «${scopeMonth}»`:'весь период'}. Воронка и конверсии — законченные группы. Оценка после линии — весь журнал ОС. «В обучении» видны в списке, но не в цифрах результата.</div>
     <div class="section-head"><h2>Воронка тренера</h2></div>
     <div class="funnel" id="trainerFunnel" style="margin-bottom:22px;"></div>
@@ -2161,7 +2219,6 @@ function weekTrainerRows(w){
   })).sort((a,b)=>(b.finalCount-a.finalCount) || (b.starts-a.starts) || a.name.localeCompare(b.name,'ru'));
 }
 
-const WEEKDAY_SHORT = ['вс','пн','вт','ср','чт','пт','сб'];
 function weekdayOf(iso){ const d = parseIsoDate(iso); return d ? WEEKDAY_SHORT[d.getUTCDay()] : ''; }
 function isWorkdayIso(iso){ const d = parseIsoDate(iso).getUTCDay(); return d>=1 && d<=5; }
 function workdaysInclusive(a, b){
@@ -2637,6 +2694,464 @@ function renderWeekTrendChart(canvasId, trend){
       }
     }
   });
+}
+
+// ======================================================
+// Уход кандидатов — лист «Регистрация уволенных» (schema v10, ADR-023)
+// API отдаёт справочники + кортежи строк; здесь только подсчёт и отрисовка.
+// Главный разрез — день обучения, на котором ушёл кандидат; причины и инициаторы — внутри дня.
+// ======================================================
+// Константы и состояние вкладки объявлены вверху скрипта (рядом с остальным состоянием): renderAll из локального кэша
+// вызывается раньше, чем интерпретатор дойдёт до этого места.
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function dismissalsPayload(){
+  const d = dashboardData && dashboardData.dismissals;
+  return d && Array.isArray(d.rows) && Array.isArray(d.reasons) ? d : null;
+}
+function monthNameOfIso(iso){ return iso ? (RU_MONTHS[Number(iso.slice(5,7))-1] || '') : ''; }
+function dmDayLabel(day){ return day ? `${day}-й день` : 'День не указан'; }
+
+/** Строки реестра → объекты; фильтр месяца — по дате старта группы (как groups[].month). */
+function dismissalRecords(opts={}){
+  const d = dismissalsPayload(); if(!d) return [];
+  const month = opts.month !== undefined ? opts.month : periodMonth;
+  const trainerKey = opts.trainer ? trainerMatchKey(opts.trainer) : '';
+  const out = [];
+  d.rows.forEach(r=>{
+    const reason = d.reasons[r[4]] || { key:'unknown', category:'other', label:'Не указано' };
+    const rec = {
+      trainer: d.trainers[r[0]] || '—', date: r[1] || '', month: monthNameOfIso(r[1]),
+      day: Number(r[2]) || 0, initiator: Number(r[3]), reasonIdx: r[4], reason, category: reason.category,
+      contacted: r[5]
+    };
+    if(month && rec.month !== month) return;
+    if(trainerKey && trainerMatchKey(rec.trainer) !== trainerKey) return;
+    out.push(rec);
+  });
+  return out;
+}
+
+function summarizeDismissals(recs){
+  const d = dismissalsPayload() || { categories:[], reasons:[], initiators:[] };
+  const maxDay = recs.reduce((m,r)=>Math.max(m, r.day), 0);
+  const dayKeys = [];
+  for(let i=1;i<=Math.max(maxDay,1);i++) dayKeys.push(i);
+  if(recs.some(r=>!r.day)) dayKeys.push(0);
+  const days = {};
+  dayKeys.forEach(k=>{ days[k] = { day:k, count:0, byCat:{}, byInit:[0,0,0,0], byReason:{} }; });
+  const byCat = {}, byReason = {}, byInit = [0,0,0,0];
+  let contactedYes = 0, contactedFilled = 0, daySum = 0, dayN = 0;
+  recs.forEach(r=>{
+    const dd = days[r.day];
+    dd.count++;
+    dd.byCat[r.category] = (dd.byCat[r.category]||0) + 1;
+    dd.byReason[r.reasonIdx] = (dd.byReason[r.reasonIdx]||0) + 1;
+    dd.byInit[r.initiator] = (dd.byInit[r.initiator]||0) + 1;
+    byCat[r.category] = (byCat[r.category]||0) + 1;
+    byReason[r.reasonIdx] = (byReason[r.reasonIdx]||0) + 1;
+    byInit[r.initiator] = (byInit[r.initiator]||0) + 1;
+    if(r.contacted === 1 || r.contacted === 0){ contactedFilled++; if(r.contacted===1) contactedYes++; }
+    if(r.day){ daySum += r.day; dayN++; }
+  });
+  const total = recs.length;
+  const topReason = Object.keys(byReason).sort((a,b)=>byReason[b]-byReason[a])[0];
+  return {
+    total, dayKeys, days, byCat, byReason, byInit, contactedYes, contactedFilled,
+    avgDay: dayN ? round1(daySum/dayN) : null,
+    day1: days[1] ? days[1].count : 0,
+    topReason: topReason!==undefined ? { idx:Number(topReason), label:d.reasons[topReason].label, count:byReason[topReason] } : null,
+    categories: d.categories, reasons: d.reasons, initiators: d.initiators
+  };
+}
+
+/** Категории с уходами по убыванию; «Прочее» всегда в конце. */
+function dmCatsSorted(s){
+  return s.categories.filter(c=>s.byCat[c.key])
+    .sort((a,b)=>(a.key==='other')-(b.key==='other') || s.byCat[b.key]-s.byCat[a.key]);
+}
+
+function dmTopOf(map){
+  const k = Object.keys(map||{}).sort((a,b)=>map[b]-map[a])[0];
+  return k===undefined ? null : { key:k, count:map[k] };
+}
+
+/** Горизонтальные столбики по дням: длина = число ушедших, сегменты = категории или инициаторы. */
+function dmDayBarsHtml(s, mode){
+  const max = Math.max(1, ...s.dayKeys.map(k=>s.days[k].count));
+  const rows = s.dayKeys.map(k=>{
+    const dd = s.days[k];
+    const segs = mode==='initiator'
+      ? s.initiators.map((name,i)=>({ n: dd.byInit[i]||0, color: DM_INIT_COLORS[i], label: name }))
+      : s.categories.map(c=>({ n: dd.byCat[c.key]||0, color: DM_CAT_COLORS[c.key]||'#A3AAB5', label: c.label }));
+    const inner = segs.filter(x=>x.n>0).map(x=>`<i style="flex:${x.n};background:${x.color};" title="${esc(dmDayLabel(k))} · ${esc(x.label)}: ${x.n} (${pct(x.n, dd.count)}% дня)"></i>`).join('');
+    return `<div class="dm-bar-row">
+      <div class="dm-bar-label">${dmDayLabel(k)}</div>
+      <div class="dm-bar-track"><div class="dm-bar-fill" style="width:${dd.count ? Math.max(1.5, dd.count/max*100) : 0}%;">${inner}</div></div>
+      <div class="dm-bar-val">${dd.count} <span>· ${pct(dd.count, s.total)}%</span></div>
+    </div>`;
+  }).join('');
+  return `<div class="dm-bars">${rows}</div>`;
+}
+
+function dmLegendHtml(s, mode){
+  const items = mode==='initiator'
+    ? s.initiators.map((name,i)=>({ color:DM_INIT_COLORS[i], label:name, n:s.byInit[i]||0 }))
+    : s.categories.map(c=>({ color:DM_CAT_COLORS[c.key]||'#A3AAB5', label:c.label, n:s.byCat[c.key]||0 }));
+  return `<div class="dm-legend">${items.filter(x=>x.n>0).map(x=>`<span><i class="dm-sw" style="background:${x.color};"></i>${esc(x.label)} · ${pct(x.n, s.total)}%</span>`).join('')}</div>`;
+}
+
+/** Полный список причин с процентами, сгруппированный по категориям (без нулевых). */
+function dmReasonsListHtml(s){
+  const max = Math.max(1, ...Object.values(s.byReason));
+  return `<div class="dm-reasons">${dmCatsSorted(s).map(c=>{
+    const color = DM_CAT_COLORS[c.key] || '#A3AAB5';
+    const reasons = s.reasons.map((r,i)=>({ r, i, n:s.byReason[i]||0 })).filter(x=>x.r.category===c.key && x.n>0).sort((a,b)=>b.n-a.n);
+    return `<div class="dm-cat"><span><i class="dm-sw" style="background:${color};margin-right:6px;"></i>${esc(c.label)}</span><span class="num">${s.byCat[c.key]} · ${pct(s.byCat[c.key], s.total)}%</span></div>
+      ${reasons.map(x=>`<div class="dm-reason"><span>${esc(x.r.label)}</span><span class="mini-track"><i style="width:${x.n/max*100}%;background:${color};"></i></span><span class="num">${x.n} <span>· ${pct(x.n, s.total)}%</span></span></div>`).join('')}`;
+  }).join('')}</div>`;
+}
+
+/** Автовыводы для руководства — только из посчитанных долей, без оценочных догадок. */
+function dmInsights(s, recs, scopeTrainer){
+  const out = [];
+  if(!s.total) return out;
+  const reasonLabel = idx => s.reasons[idx] ? s.reasons[idx].label : '—';
+  const d1 = s.days[1];
+  if(d1 && d1.count){
+    const top = dmTopOf(d1.byReason);
+    out.push(`<b>${pct(d1.count, s.total)}%</b> уходят в <b>1-й день</b> (${d1.count} из ${s.total}). Чаще всего: «${esc(reasonLabel(top.key))}» — ${pct(top.count, d1.count)}% уходов этого дня.`);
+  }
+  const later = s.dayKeys.filter(k=>k>=2 && s.days[k].count);
+  if(later.length){
+    const peak = later.slice().sort((a,b)=>s.days[b].count-s.days[a].count)[0];
+    const top = dmTopOf(s.days[peak].byReason);
+    out.push(`После 1-го дня уходит ещё <b>${pct(later.reduce((n,k)=>n+s.days[k].count,0), s.total)}%</b>: ${later.map(k=>`${k}-й — ${pct(s.days[k].count, s.total)}%`).join(', ')}. Пик — ${peak}-й день, в основном «${esc(reasonLabel(top.key))}».`);
+  }
+  const late = recs.filter(r=>r.day>=3);
+  if(late.length >= 3){
+    const byCat = {}; late.forEach(r=>{ byCat[r.category]=(byCat[r.category]||0)+1; });
+    const top = dmTopOf(byCat);
+    const cat = s.categories.find(c=>c.key===top.key);
+    const byTrainer = late.filter(r=>r.initiator===1).length;
+    out.push(`С 3-го дня (${late.length} чел.) главная категория — «${esc(cat?cat.label:top.key)}» (${pct(top.count, late.length)}%); по инициативе тренера — ${pct(byTrainer, late.length)}% этих уходов.`);
+  }
+  const selfN = s.byInit[0]||0, trN = s.byInit[1]||0, coN = s.byInit[2]||0;
+  if(trN || coN){
+    const trRecs = recs.filter(r=>r.initiator===1);
+    const byR = {}; trRecs.forEach(r=>{ byR[r.reasonIdx]=(byR[r.reasonIdx]||0)+1; });
+    const top = dmTopOf(byR);
+    out.push(`Инициатор: кандидат — <b>${pct(selfN, s.total)}%</b>, тренер — <b>${pct(trN, s.total)}%</b>, компания — ${pct(coN, s.total)}%.${top?` Когда инициатор тренер, чаще всего причина — «${esc(reasonLabel(top.key))}» (${pct(top.count, trRecs.length)}%).`:''}`);
+  }
+  const noshow = s.byCat.noshow || 0;
+  if(noshow) out.push(`<b>${pct(noshow, s.total)}%</b> уходят молча: не пришли после распределения, не вышли на следующий день или ушли без обратной связи — причину по ним не узнать.`);
+  if(s.contactedFilled) out.push(`Тренер связался с кандидатом после ухода в <b>${pct(s.contactedYes, s.contactedFilled)}%</b> случаев (из ${s.contactedFilled}, где ответ «да/нет»).`);
+  if(!scopeTrainer){
+    const company = pct(s.day1, s.total);
+    const byT = {};
+    recs.forEach(r=>{ const t = byT[r.trainer] || (byT[r.trainer] = { n:0, d1:0 }); t.n++; if(r.day===1) t.d1++; });
+    const cand = Object.keys(byT).filter(n=>byT[n].n>=DM_MIN_TRAINER_ROWS)
+      .map(n=>({ n, share: pct(byT[n].d1, byT[n].n), total: byT[n].n }))
+      .filter(x=>Math.abs(x.share-company)>=10).sort((a,b)=>Math.abs(b.share-company)-Math.abs(a.share-company)).slice(0,2);
+    cand.forEach(x=>out.push(`${esc(x.n)}: в 1-й день уходит <b>${x.share}%</b> при среднем ${company}% (${x.total} записей).`));
+  }
+  return out;
+}
+
+/** Причина × день: все причины по категориям; ячейка = кол-во, подсветка — доля по строке (когда уходят по этой причине). */
+function dmHeatTableHtml(s, recs){
+  const days = s.dayKeys;
+  const cell = (n, rowTotal) => {
+    if(!n) return `<td class="h"><span class="muted-num">·</span></td>`;
+    const share = rowTotal ? n/rowTotal : 0;
+    return `<td class="h" style="background:rgba(42,120,214,${(0.08 + share*0.5).toFixed(2)});" title="${n} — ${pct(n,rowTotal)}% строки"><b>${n}</b><small>${pct(n,rowTotal)}%</small></td>`;
+  };
+  const byReasonDay = {};
+  recs.forEach(r=>{ const m = byReasonDay[r.reasonIdx] || (byReasonDay[r.reasonIdx] = {}); m[r.day] = (m[r.day]||0)+1; });
+  const byCatDay = {};
+  recs.forEach(r=>{ const m = byCatDay[r.category] || (byCatDay[r.category] = {}); m[r.day] = (m[r.day]||0)+1; });
+  const avgDayOf = filter => { const xs = recs.filter(r=>filter(r) && r.day); return xs.length ? round1(xs.reduce((a,r)=>a+r.day,0)/xs.length) : '—'; };
+  const body = dmCatsSorted(s).map(c=>{
+    const ct = s.byCat[c.key];
+    const head = `<tr class="dm-cat-row"><td><i class="dm-sw" style="background:${DM_CAT_COLORS[c.key]||'#A3AAB5'};margin-right:6px;"></i>${esc(c.label)}</td>
+      <td class="h">${ct}</td><td class="h">${pct(ct, s.total)}%</td>
+      ${days.map(k=>`<td class="h">${(byCatDay[c.key]||{})[k]||'·'}</td>`).join('')}<td class="h">${avgDayOf(r=>r.category===c.key)}</td></tr>`;
+    const rows = s.reasons.map((r,i)=>({ r, i, n:s.byReason[i]||0 })).filter(x=>x.r.category===c.key && x.n>0).sort((a,b)=>b.n-a.n)
+      .map(x=>`<tr><td class="rl">${esc(x.r.label)}</td><td class="h">${x.n}</td><td class="h">${pct(x.n, s.total)}%</td>
+        ${days.map(k=>cell((byReasonDay[x.i]||{})[k]||0, x.n)).join('')}<td class="h">${avgDayOf(rr=>rr.reasonIdx===x.i)}</td></tr>`).join('');
+    return head + rows;
+  }).join('');
+  return `<div style="overflow-x:auto;"><table class="dropout-table dm-heat" id="dmHeatTable">
+    <thead><tr><th>Причина</th><th style="text-align:center;">Всего</th><th style="text-align:center;">Доля</th>${days.map(k=>`<th style="text-align:center;">${k?k+'-й день':'День ?'}</th>`).join('')}<th style="text-align:center;">Ср. день</th></tr></thead>
+    <tbody>${body}
+      <tr class="dm-cat-row"><td>Итого</td><td class="h">${s.total}</td><td class="h">100%</td>${days.map(k=>`<td class="h">${s.days[k].count} <small>${pct(s.days[k].count, s.total)}%</small></td>`).join('')}<td class="h">${s.avgDay!=null?s.avgDay:'—'}</td></tr>
+    </tbody></table></div>`;
+}
+
+function dmInitiatorTableHtml(s){
+  const days = s.dayKeys;
+  return `<div style="overflow-x:auto;"><table class="dropout-table">
+    <thead><tr><th>Инициатор</th><th>Всего</th>${days.map(k=>`<th>${k?k+'-й':'?'}</th>`).join('')}</tr></thead>
+    <tbody>${s.initiators.map((name,i)=>({ name, i, n:s.byInit[i]||0 })).filter(x=>x.n>0).map(x=>`<tr>
+      <td><i class="dm-sw" style="background:${DM_INIT_COLORS[x.i]};margin-right:6px;"></i>${esc(x.name)}</td>
+      <td>${x.n} <span class="muted-num">· ${pct(x.n, s.total)}%</span></td>
+      ${days.map(k=>{ const n = s.days[k].byInit[x.i]||0; return `<td>${n?`${n} <span class="muted-num">· ${pct(n, s.days[k].count)}%</span>`:'<span class="muted-num">·</span>'}</td>`; }).join('')}
+    </tr>`).join('')}</tbody>
+  </table></div>
+  <div class="footnote">Проценты в колонке дня — доля инициатора среди ушедших в этот день.</div>`;
+}
+
+function dmTrainerRows(recs){
+  const byT = {};
+  recs.forEach(r=>{ (byT[r.trainer] || (byT[r.trainer] = [])).push(r); });
+  return Object.keys(byT).map(name=>{
+    const rs = byT[name]; const s = summarizeDismissals(rs);
+    const later = n => rs.filter(r=>r.day>=n).length;
+    return {
+      name, total: rs.length, s,
+      d1: rs.filter(r=>r.day===1).length, d2: rs.filter(r=>r.day===2).length, d3: rs.filter(r=>r.day===3).length, d4: later(4),
+      byTrainer: rs.filter(r=>r.initiator===1).length,
+      silent: rs.filter(r=>r.category==='noshow').length
+    };
+  }).sort((a,b)=>b.total-a.total);
+}
+
+function dmMonthRows(recs){
+  const byM = {};
+  recs.forEach(r=>{ if(!r.date) return; const k = r.date.slice(0,7); (byM[k] || (byM[k] = [])).push(r); });
+  return Object.keys(byM).sort().map(k=>{
+    const rs = byM[k]; const s = summarizeDismissals(rs);
+    return { key:k, month: monthNameOfIso(k+'-01'), total: rs.length, s,
+      d1: rs.filter(r=>r.day===1).length, d2: rs.filter(r=>r.day===2).length, d3p: rs.filter(r=>r.day>=3).length,
+      byTrainer: rs.filter(r=>r.initiator===1).length };
+  });
+}
+
+function dmShareBadge(part, whole, warnAt){
+  const v = pct(part, whole);
+  return whole ? `<span class="badge ${v>=warnAt?'danger':'neutral'}">${v}%</span>` : '—';
+}
+
+function renderDismissalsTab(){
+  if(!dashboardData) return;
+  const old = el('panel-dismissals');
+  const wasActive = old ? old.classList.contains('active') : false;
+  const mount = html => {
+    if(old) old.outerHTML = html; else el('content').insertAdjacentHTML('beforeend', html);
+    if(wasActive) el('panel-dismissals').classList.add('active');
+  };
+  const d = dismissalsPayload();
+  if(!d || (!d.ok && !d.rows.length)){
+    mount(`<div id="panel-dismissals" class="tab-panel"><div class="placeholder"><div class="big">Нет данных по уходу кандидатов</div>
+      <div>${d && d.error ? esc(d.error) : 'Веб-сервис ещё старой версии (нужна schema v10) — обнови Apps Script.'}</div></div></div>`);
+    return;
+  }
+  const allInScope = dismissalRecords({ trainer:'' });
+  const trainers = [...new Set(allInScope.map(r=>r.trainer))].sort((a,b)=>a.localeCompare(b,'ru'));
+  if(dmTrainer && !trainers.includes(dmTrainer)) dmTrainer = '';
+  const recs = dmTrainer ? allInScope.filter(r=>r.trainer===dmTrainer) : allInScope;
+  const s = summarizeDismissals(recs);
+  const company = dmTrainer ? summarizeDismissals(allInScope) : null;
+  const scopeText = `${periodMonth ? `группы, стартовавшие в месяце «${esc(periodMonth)}»` : 'весь реестр'}${dmTrainer ? ` · тренер ${esc(dmTrainer)}` : ''}`;
+  const insights = dmInsights(s, recs, !!dmTrainer);
+  const tRows = dmTrainerRows(allInScope);
+  const base = dmTrainer ? company : s; // среднее по области для подсветки строк тренеров
+  const mRows = dmMonthRows(dmTrainer ? recs : dismissalRecords({ month:'', trainer:'' }));
+  const pctOrDash = (a,b) => b ? pct(a,b)+'%' : '—';
+  const cmp = (val, base) => company && company.total ? `<div class="compare-row ${val>base?'down':'up'}" style="font-weight:500;">${val>base?'▲':'▼'} ${Math.abs(round1(val-base))} п.п. к среднему (${base}%)</div>` : '';
+  const d1Share = pct(s.day1, s.total);
+  const trShare = pct(s.byInit[1]||0, s.total);
+
+  const html = `<div id="panel-dismissals" class="tab-panel">
+    <div class="context-banner">
+      <div>
+        <div class="eyebrow">Уход кандидатов · реестр «Регистрация уволенных»</div>
+        <div class="headline">${s.total ? `Ушло ${s.total} ${plural(s.total,'кандидат','кандидата','кандидатов')} — ${d1Share}% в первый же день` : 'В выбранной области уходов нет'}</div>
+        <div class="support">Область: ${scopeText}. Главное — на каком дне обучения уходят и почему; причины разложены по категориям. Период определяется по дате старта группы, а не по дате заполнения формы.</div>
+      </div>
+      <div class="week-nav">
+        <select id="dmTrainerSelect" aria-label="Тренер">
+          <option value="">Все тренеры</option>
+          ${trainers.map(n=>`<option value="${esc(n)}" ${n===dmTrainer?'selected':''}>${esc(trainerNameText(n))}</option>`).join('')}
+        </select>
+        ${dmTrainer ? `<button class="btn" id="dmOpenTrainer" type="button">Карточка тренера</button><button class="btn" id="dmResetTrainer" type="button">Все тренеры</button>` : ''}
+      </div>
+    </div>
+
+    ${!s.total ? '<div class="section"><div class="footnote">Нет записей. Смени месяц сверху или тренера.</div></div>' : `
+    <div class="kpi-grid kpi-4">
+      <div class="kpi-card danger"><div class="label">Ушло кандидатов</div><div class="value">${s.total}</div>
+        <div class="sub">${dmTrainer ? `${pct(s.total, company.total)}% всех уходов в области` : `${trainers.length} ${plural(trainers.length,'тренер','тренера','тренеров')} в реестре`}</div></div>
+      <div class="kpi-card warning"><div class="label">Ушли в 1-й день</div><div class="value">${d1Share}%</div>
+        <div class="sub">${s.day1} чел. · средний день ухода ${s.avgDay!=null?s.avgDay:'—'}</div>${cmp(d1Share, company ? pct(company.day1, company.total) : 0)}</div>
+      <div class="kpi-card"><div class="label">Инициатор — тренер</div><div class="value">${trShare}%</div>
+        <div class="sub">кандидат сам — ${pctOrDash(s.byInit[0]||0, s.total)} · компания — ${pctOrDash(s.byInit[2]||0, s.total)}</div>${cmp(trShare, company ? pct(company.byInit[1]||0, company.total) : 0)}</div>
+      <div class="kpi-card accent"><div class="label">Самая частая причина</div><div class="value" style="font-size:19px;line-height:1.25;">${s.topReason?esc(s.topReason.label):'—'}</div>
+        <div class="sub">${s.topReason?`${s.topReason.count} чел. · ${pct(s.topReason.count, s.total)}% уходов`:''}</div></div>
+    </div>
+
+    <div class="two-col">
+      <div class="section">
+        <div class="section-head"><h2>В какой день уходят</h2>
+          <div class="dm-seg" role="group" aria-label="Разбивка">
+            <button type="button" data-break="category" class="${dmBreak==='category'?'on':''}">По причинам</button>
+            <button type="button" data-break="initiator" class="${dmBreak==='initiator'?'on':''}">По инициатору</button>
+          </div>
+        </div>
+        ${dmLegendHtml(s, dmBreak)}
+        ${dmDayBarsHtml(s, dmBreak)}
+        <div class="footnote">Длина полосы — сколько ушло в этот день; цвет — из-за чего (или по чьей инициативе). Наведи на сегмент — точная цифра.</div>
+      </div>
+      <div class="section">
+        <div class="section-head"><h2>Выводы</h2><div class="desc">Считаются автоматически из цифр области</div></div>
+        <ul class="wk-brief">${insights.map(x=>`<li>${x}</li>`).join('')}</ul>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>Причины × день обучения</h2><div class="desc">Все причины с долями · в ячейке — сколько ушло и какой % этой причины пришёлся на день · чем темнее, тем чаще</div></div>
+      ${dmHeatTableHtml(s, recs)}
+      <div class="footnote">Пункты из списка формы берём как есть. Свободный текст тренера (≈30% записей) разложен по ключевым словам: «не пришёл после распределения», «не вышел на следующий день», «ушёл без ОС» и т.д.; что не распознано — «Другое».</div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>Кто инициатор</h2><div class="desc">По дням обучения: растёт ли доля решений тренера к концу обучения</div></div>
+      ${dmInitiatorTableHtml(s)}
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>По тренерам</h2><div class="desc">${periodMonth?`Месяц «${esc(periodMonth)}»`:'Весь реестр'} · клик — показать только этого тренера · красным — заметно выше среднего</div></div>
+      <div style="overflow-x:auto;">
+        <table class="dropout-table" id="dmTrainerTable">
+          <thead><tr><th>Тренер</th><th>Ушло</th><th>1-й день</th><th>2-й день</th><th>3-й день</th><th>4-й+</th><th>Ср. день</th><th>По решению тренера</th><th>Молча (без ОС)</th><th>Главная причина</th><th>Связался</th></tr></thead>
+          <tbody>${tRows.map(t=>{
+            const top = t.s.topReason;
+            return `<tr data-dm-trainer="${esc(t.name)}" class="${t.name===dmTrainer?'is-selected':''}">
+              <td>${trainerNameLabel(t.name)}${t.total<DM_MIN_TRAINER_ROWS?' <span class="muted-num" style="font-size:11px;">мало записей</span>':''}</td>
+              <td>${t.total}</td>
+              <td>${dmShareBadge(t.d1, t.total, pct(base.day1, base.total)+10)}</td>
+              <td>${pctOrDash(t.d2, t.total)}</td>
+              <td>${pctOrDash(t.d3, t.total)}</td>
+              <td>${pctOrDash(t.d4, t.total)}</td>
+              <td>${t.s.avgDay!=null?t.s.avgDay:'—'}</td>
+              <td>${dmShareBadge(t.byTrainer, t.total, pct(base.byInit[1]||0, base.total)+10)}</td>
+              <td>${dmShareBadge(t.silent, t.total, pct(base.byCat.noshow||0, base.total)+10)}</td>
+              <td style="font-family:var(--font-body);white-space:normal;min-width:180px;">${top?`${esc(top.label)} <span class="muted-num">· ${pct(top.count, t.total)}%</span>`:'—'}</td>
+              <td>${t.s.contactedFilled?pct(t.s.contactedYes, t.s.contactedFilled)+'%':'—'}</td>
+            </tr>`;}).join('')}</tbody>
+        </table>
+      </div>
+      <div class="footnote">Доли — от ушедших у тренера. Сравнивать тренеров честно при ${DM_MIN_TRAINER_ROWS}+ записях. Число уходов зависит и от числа групп — смотри вместе с вкладкой «По тренерам».</div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>По месяцам старта</h2><div class="desc">${dmTrainer?`Тренер ${esc(dmTrainer)} · `:''}полная история реестра — видно, меняется ли картина</div></div>
+      <div style="overflow-x:auto;">
+        <table class="dropout-table" id="dmMonthTable">
+          <thead><tr><th>Месяц</th><th>Ушло</th><th>1-й день</th><th>2-й день</th><th>3-й+</th><th>По решению тренера</th><th>Главная причина</th></tr></thead>
+          <tbody>${mRows.map(m=>`<tr class="${m.month===periodMonth?'is-selected':''}">
+            <td>${esc(m.month)} <span class="muted-num" style="font-size:11px;">${m.key.slice(0,4)}</span></td>
+            <td>${m.total}</td><td>${pctOrDash(m.d1, m.total)}</td><td>${pctOrDash(m.d2, m.total)}</td><td>${pctOrDash(m.d3p, m.total)}</td>
+            <td>${pctOrDash(m.byTrainer, m.total)}</td>
+            <td style="font-family:var(--font-body);white-space:normal;">${m.s.topReason?`${esc(m.s.topReason.label)} <span class="muted-num">· ${pct(m.s.topReason.count, m.total)}%</span>`:'—'}</td>
+          </tr>`).join('') || '<tr><td colspan="7" style="font-family:var(--font-body);color:var(--text-muted);">Нет записей с датой старта</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>`}
+    <div class="footnote" style="margin-bottom:8px;">Источник — форма «Регистрация уволенных»; это отдельный учёт, и он не обязан совпадать с колонками «Ушли сами / отказали» основного листа (форму заполняют не всегда и с задержкой). ФИО, контакты и текст ОС кандидатов в дашборд не передаются.${d.unmatchedTrainers?` Записей с тренером, которого нет в обучении: ${d.unmatchedTrainers}.`:''}${d.error?` Ошибка: ${esc(d.error)}.`:''}</div>
+  </div>`;
+  mount(html);
+
+  const rerender = () => renderDismissalsTab();
+  el('dmTrainerSelect').addEventListener('change', e=>{ dmTrainer = e.target.value; rerender(); });
+  if(el('dmResetTrainer')) el('dmResetTrainer').addEventListener('click', ()=>{ dmTrainer = ''; rerender(); });
+  if(el('dmOpenTrainer')) el('dmOpenTrainer').addEventListener('click', ()=>{
+    const found = (viewData && viewData.byTrainer || []).find(t=>trainerMatchKey(t.name)===trainerMatchKey(dmTrainer));
+    if(found) openTrainerDetail(found.name, { skipUrl:true });
+  });
+  document.querySelectorAll('#panel-dismissals .dm-seg button[data-break]').forEach(b=>b.addEventListener('click', ()=>{ dmBreak = b.dataset.break; rerender(); }));
+  document.querySelectorAll('#dmTrainerTable tr[data-dm-trainer]').forEach(tr=>tr.addEventListener('click', ()=>{
+    dmTrainer = dmTrainer===tr.dataset.dmTrainer ? '' : tr.dataset.dmTrainer; rerender();
+    el('panel-dismissals').scrollIntoView({ behavior:'smooth', block:'start' });
+  }));
+}
+
+/** Блок на «Обзоре»: дни + полный список причин; учитывает фильтр месяца. */
+function renderDismissalsOverviewSection(){
+  const d = dismissalsPayload();
+  if(!d || (!d.ok && !d.rows.length)) return '';
+  const recs = dismissalRecords({ trainer:'' });
+  const s = summarizeDismissals(recs);
+  return `<div class="section">
+    <div class="section-head"><h2>Уход кандидатов: когда и почему</h2>
+      <div class="desc">Реестр «Регистрация уволенных» · ${periodMonth?`группы месяца «${esc(periodMonth)}»`:'весь реестр'} · ${s.total} ${plural(s.total,'запись','записи','записей')} · отдельный учёт, не смешан с KPI выше</div></div>
+    ${!s.total ? '<div class="footnote">В выбранной области записей нет.</div>' : `
+    <div class="mini-kpi-grid">
+      <div class="mini-kpi"><div class="label">Ушло</div><div class="value">${s.total}</div></div>
+      <div class="mini-kpi"><div class="label">В 1-й день</div><div class="value">${pct(s.day1, s.total)}%</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">средний день ухода ${s.avgDay!=null?s.avgDay:'—'}</div></div>
+      <div class="mini-kpi"><div class="label">Сами / тренер / компания</div><div class="value" style="font-size:18px;">${pct(s.byInit[0]||0,s.total)} / ${pct(s.byInit[1]||0,s.total)} / ${pct(s.byInit[2]||0,s.total)}%</div></div>
+      <div class="mini-kpi"><div class="label">Ушли молча</div><div class="value">${pct(s.byCat.noshow||0, s.total)}%</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">не пришли / без ОС</div></div>
+    </div>
+    <div class="two-col">
+      <div>
+        <div class="section-head" style="margin-bottom:10px;"><h2 style="font-size:15px;">В какой день уходят</h2></div>
+        ${dmLegendHtml(s, 'category')}
+        ${dmDayBarsHtml(s, 'category')}
+      </div>
+      <div>
+        <div class="section-head" style="margin-bottom:10px;"><h2 style="font-size:15px;">Все причины</h2></div>
+        ${dmReasonsListHtml(s)}
+      </div>
+    </div>`}
+    <div style="margin-top:14px;"><button class="btn" id="dmOpenTab" type="button">Подробный анализ — вкладка «Уход кандидатов» →</button></div>
+  </div>`;
+}
+
+/** Блок в карточке тренера: его уходы за выбранный в карточке период. */
+function renderTrainerDismissalsBlock(name, scopeMonth){
+  const d = dismissalsPayload();
+  if(!d || (!d.ok && !d.rows.length)) return '';
+  const recs = dismissalRecords({ month: scopeMonth || '', trainer: name });
+  const all = summarizeDismissals(dismissalRecords({ month: scopeMonth || '', trainer:'' }));
+  if(!recs.length) return `<div class="footnote" style="margin:0 0 14px;">Уход кандидатов: в реестре «Регистрация уволенных» записей у тренера ${scopeMonth?'за этот месяц ':''}нет.</div>`;
+  const s = summarizeDismissals(recs);
+  return `<div class="section-head" style="margin-top:6px;"><h2>Уход кандидатов</h2><div class="desc">Реестр «Регистрация уволенных» · ${scopeMonth?`месяц «${esc(scopeMonth)}»`:'весь реестр'}</div></div>
+    <div class="mini-kpi-grid">
+      <div class="mini-kpi"><div class="label">Ушло</div><div class="value">${s.total}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${pct(s.total, all.total)}% всех уходов</div></div>
+      <div class="mini-kpi"><div class="label">В 1-й день</div><div class="value">${pct(s.day1, s.total)}%</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">в среднем ${pct(all.day1, all.total)}%</div></div>
+      <div class="mini-kpi"><div class="label">По решению тренера</div><div class="value">${pct(s.byInit[1]||0, s.total)}%</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">в среднем ${pct(all.byInit[1]||0, all.total)}%</div></div>
+      <div class="mini-kpi"><div class="label">Средний день ухода</div><div class="value">${s.avgDay!=null?s.avgDay:'—'}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">в среднем ${all.avgDay!=null?all.avgDay:'—'}</div></div>
+    </div>
+    ${dmLegendHtml(s, 'category')}
+    ${dmDayBarsHtml(s, 'category')}
+    <div style="margin:14px 0 18px;">${dmReasonsListHtml(s)}</div>`;
+}
+
+function dismissalsCsvRows(){
+  const recs = dismissalRecords({ trainer: dmTrainer });
+  const s = summarizeDismissals(recs);
+  const rows = [['Область', periodMonth || 'Все месяцы', dmTrainer || 'Все тренеры'], []];
+  rows.push(['Категория','Причина','Всего','Доля %', ...s.dayKeys.map(k=>k?`День ${k}`:'День ?')]);
+  s.categories.forEach(c=>s.reasons.forEach((r,i)=>{
+    if(r.category!==c.key || !s.byReason[i]) return;
+    rows.push([c.label, r.label, s.byReason[i], pct(s.byReason[i], s.total), ...s.dayKeys.map(k=>s.days[k].byReason[i]||0)]);
+  }));
+  rows.push(['Итого','', s.total, 100, ...s.dayKeys.map(k=>s.days[k].count)], []);
+  rows.push(['Инициатор','Всего', ...s.dayKeys.map(k=>k?`День ${k}`:'День ?')]);
+  s.initiators.forEach((n,i)=>{ if(s.byInit[i]) rows.push([n, s.byInit[i], ...s.dayKeys.map(k=>s.days[k].byInit[i]||0)]); });
+  rows.push([]);
+  rows.push(['Тренер','Ушло','1-й день','2-й день','3-й день','4-й+','Ср. день','Инициатор тренер','Молча (без ОС)','Главная причина','Связался %']);
+  dmTrainerRows(dismissalRecords({ trainer:'' })).forEach(t=>rows.push([
+    trainerNameText(t.name), t.total, t.d1, t.d2, t.d3, t.d4, t.s.avgDay, t.byTrainer, t.silent,
+    t.s.topReason ? t.s.topReason.label : '', t.s.contactedFilled ? pct(t.s.contactedYes, t.s.contactedFilled) : ''
+  ]));
+  return rows;
 }
 </script>
 </body>
