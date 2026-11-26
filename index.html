@@ -2846,15 +2846,6 @@ function dmInsights(s, recs, scopeTrainer){
   const noshow = s.byCat.noshow || 0;
   if(noshow) out.push(`<b>${pct(noshow, s.total)}%</b> уходят молча: не пришли после распределения, не вышли на следующий день или ушли без обратной связи — причину по ним не узнать.`);
   if(s.contactedFilled) out.push(`Тренер связался с кандидатом после ухода в <b>${pct(s.contactedYes, s.contactedFilled)}%</b> случаев (из ${s.contactedFilled}, где ответ «да/нет»).`);
-  if(!scopeTrainer){
-    const company = pct(s.day1, s.total);
-    const byT = {};
-    recs.forEach(r=>{ const t = byT[r.trainer] || (byT[r.trainer] = { n:0, d1:0 }); t.n++; if(r.day===1) t.d1++; });
-    const cand = Object.keys(byT).filter(n=>byT[n].n>=DM_MIN_TRAINER_ROWS)
-      .map(n=>({ n, share: pct(byT[n].d1, byT[n].n), total: byT[n].n }))
-      .filter(x=>Math.abs(x.share-company)>=10).sort((a,b)=>Math.abs(b.share-company)-Math.abs(a.share-company)).slice(0,2);
-    cand.forEach(x=>out.push(`${esc(x.n)}: в 1-й день уходит <b>${x.share}%</b> при среднем ${company}% (${x.total} записей).`));
-  }
   return out;
 }
 
