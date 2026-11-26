@@ -252,6 +252,14 @@
   .wk-nums b{font-family:var(--font-mono); color:var(--text-primary);}
   .wk-sep{color:var(--text-muted);}
   .wk-drop{font-size:12px; color:var(--text-muted); margin-top:6px;}
+  .dm-gc{margin-top:8px; padding-top:8px; border-top:1px dashed var(--border); font-size:12px; color:var(--text-secondary);}
+  .dm-gc-head{margin-bottom:5px;}
+  .dm-gc-head b{color:var(--text-primary);}
+  .dm-gc-days{display:block; color:var(--text-muted); margin-top:1px;}
+  .dm-gc-list{display:flex; flex-direction:column; gap:3px;}
+  .dm-gc-item{display:flex; align-items:center; gap:6px; line-height:1.3;}
+  .dm-gc-item .n{margin-left:auto; color:var(--text-muted); font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .dm-gc-miss{margin-top:8px; font-size:12px; color:var(--text-muted);}
   .wk-more{margin-top:4px;}
   .wk-more > summary{
     cursor:pointer; list-style:none; font-size:13px; font-weight:600; color:var(--accent-dark);
@@ -466,6 +474,8 @@ const DM_INIT_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#A3AAB5']; // сотр
 const DM_MIN_TRAINER_ROWS = 10; // ниже — тренера не сравниваем со средним (мало записей)
 let dmTrainer = '';          // фильтр тренера на вкладке ('' = все)
 let dmBreak = 'category';    // разбивка дней: 'category' | 'initiator'
+let dmGroupCache = null;     // { data, byGroup: Map(groupIdx → записи формы) } — привязка уволенных к группам
+const DM_GROUP_MAX_SHIFT = 3; // тренер мог ошибиться датой старта в форме на 1–3 дня
 const el = (id) => document.getElementById(id);
 let charts = {};
 
@@ -2300,6 +2310,7 @@ function groupCardHtml(g, today){
     </div>
     ${groupStepsHtml(st, g)}
     ${groupNumbersHtml(g)}
+    ${groupDismissalsCardHtml(g)}
   </div>`;
 }
 
@@ -2355,7 +2366,8 @@ function openGroupDetail(gidx, opts={}){
       ${kpi('Перенесли', g.transferred || 0, ofDay1(g.transferred))}
     </div>
     <div class="section-head"><h2>Воронка группы</h2></div>
-    <div class="funnel" id="groupFunnel" style="margin-bottom:16px;"></div>`}
+    <div class="funnel" id="groupFunnel" style="margin-bottom:16px;"></div>
+    ${groupDismissalsDetailHtml(g)}`}
     <div class="footnote">${note}${g.comment ? ` Комментарий в таблице: «${g.comment}».` : ''}</div>
   `;
   if(!ng){
@@ -2810,6 +2822,117 @@ function dmReasonsListHtml(s){
     return `<div class="dm-cat"><span><i class="dm-sw" style="background:${color};margin-right:6px;"></i>${esc(c.label)}</span><span class="num">${s.byCat[c.key]} · ${pct(s.byCat[c.key], s.total)}%</span></div>
       ${reasons.map(x=>`<div class="dm-reason"><span>${esc(x.r.label)}</span><span class="mini-track"><i style="width:${x.n/max*100}%;background:${color};"></i></span><span class="num">${x.n} <span>· ${pct(x.n, s.total)}%</span></span></div>`).join('')}`;
   }).join('')}</div>`;
+}
+
+/**
+ * Привязка записей формы к группам: тот же тренер + дата старта группы.
+ * Точное совпадение — ~96% записей; ещё ~2% тренер указал со сдвигом на 1–2 дня — берём ближайшую группу
+ * тренера в пределах DM_GROUP_MAX_SHIFT дней. Несобравшиеся группы не берём (людей не было).
+ */
+function dmGroupIndex(){
+  const data = dashboardData;
+  if(dmGroupCache && dmGroupCache.data === data) return dmGroupCache;
+  const byGroup = new Map();
+  let registryStart = '';
+  const groups = (data && data.groups) || [];
+  const byTrainer = {};
+  groups.forEach((g, i)=>{
+    if(!g.startDate || isNotGathered(g)) return;
+    const k = trainerMatchKey(g.trainer);
+    (byTrainer[k] = byTrainer[k] || []).push({ g, i });
+  });
+  if(dismissalsPayload()){
+    dismissalRecords({ month:'' }).forEach(r=>{
+      if(!r.date) return;
+      let best = null;
+      (byTrainer[trainerMatchKey(r.trainer)] || []).forEach(x=>{
+        const shift = Math.abs(daysBetweenIso(x.g.startDate, r.date));
+        if(shift <= DM_GROUP_MAX_SHIFT && (!best || shift < best.shift)) best = { i:x.i, shift };
+      });
+      if(!best) return;
+      if(!byGroup.has(best.i)) byGroup.set(best.i, []);
+      byGroup.get(best.i).push(r);
+    });
+    // Начало реестра — первая группа с 3+ записями: одиночная запись с опечаткой в дате не должна «включать» проверку для старых групп
+    byGroup.forEach((recs, i)=>{
+      const start = String(groups[i].startDate);
+      if(recs.length >= 3 && (!registryStart || start < registryStart)) registryStart = start;
+    });
+  }
+  dmGroupCache = { data, byGroup, registryStart };
+  return dmGroupCache;
+}
+function groupDismissals(g){
+  const idx = dmGroupIndex();
+  return { recs: idx.byGroup.get(groupIndexOf(g)) || [], registryStart: idx.registryStart };
+}
+/** «В форме 3 из 5 ушедших» — если тренер внёс в форму заметно меньше, чем ушло по таблице. Не пришедших после распределения таблица отсевом не считает. */
+function dmGroupGapNote(g, recs, registryStart){
+  const sheet = (Number(g.leftSelf)||0) + (Number(g.refused)||0);
+  if(!sheet || !registryStart || String(g.startDate) < registryStart) return '';
+  const inForm = recs.filter(r=>r.reason.key !== 'noShowStart').length;
+  if(!recs.length) return groupCompleted(g)
+    ? `Причин нет: в «Регистрации уволенных» по группе записей нет (по таблице ушли ${sheet}).`
+    : `В «Регистрации уволенных» пока нет записей (по таблице ушли ${sheet}).`;
+  if(inForm < sheet - 2) return `В форме ${inForm} из ${sheet} ушедших по таблице — причины известны не по всем.`;
+  return '';
+}
+
+/** Компактный блок «Почему ушли» в карточке группы на вкладке недель. */
+function groupDismissalsCardHtml(g){
+  if(!dismissalsPayload() || isNotGathered(g)) return '';
+  const { recs, registryStart } = groupDismissals(g);
+  const gap = dmGroupGapNote(g, recs, registryStart);
+  if(!recs.length) return gap ? `<div class="dm-gc-miss">${gap}</div>` : '';
+  const s = summarizeDismissals(recs);
+  const days = s.dayKeys.filter(k=>s.days[k].count).map(k=>`${k ? k + '-й' : '?'} ${s.days[k].count}`).join(' · ');
+  const items = Object.keys(s.byReason).map(i=>({ r:s.reasons[i], n:s.byReason[i] })).sort((a,b)=>b.n-a.n);
+  const shown = items.slice(0, 4);
+  const rest = items.slice(4).reduce((a,x)=>a+x.n, 0);
+  return `<div class="dm-gc" title="Из формы «Регистрация уволенных»: тренер + дата старта группы">
+    <div class="dm-gc-head"><span>Почему ушли · <b>${s.total}</b> в форме</span><span class="dm-gc-days">по дням: ${days}</span></div>
+    <div class="dm-gc-list">${shown.map(x=>`<div class="dm-gc-item"><i class="dm-sw" style="background:${DM_CAT_COLORS[x.r.category]||'#A3AAB5'};"></i><span>${esc(x.r.label)}</span><span class="n">${x.n}</span></div>`).join('')}
+      ${rest ? `<div class="dm-gc-item" style="color:var(--text-muted);"><span style="width:10px;"></span><span>другие причины</span><span class="n">${rest}</span></div>` : ''}</div>
+    ${gap ? `<div class="dm-gc-miss">${gap}</div>` : ''}
+  </div>`;
+}
+
+/** Раздел «Почему ушли» в карточке одной группы: каждый ушедший — день, причина, инициатор (без ФИО). */
+function groupDismissalsDetailHtml(g){
+  if(!dismissalsPayload()) return '';
+  const { recs, registryStart } = groupDismissals(g);
+  const gap = dmGroupGapNote(g, recs, registryStart);
+  if(!recs.length) return gap ? `<div class="section-head"><h2>Почему ушли</h2></div><div class="footnote" style="margin-bottom:16px;">${gap}</div>` : '';
+  const s = summarizeDismissals(recs);
+  // Одинаковые причины — одной строкой: сколько, в какие дни, кто инициатор, связывался ли тренер
+  const byReason = new Map();
+  recs.forEach(r=>{
+    const x = byReason.get(r.reasonIdx) || { r, n:0, days:{}, init:{}, yes:0, filled:0 };
+    x.n++;
+    x.days[r.day] = (x.days[r.day]||0) + 1;
+    x.init[r.initiator] = (x.init[r.initiator]||0) + 1;
+    if(r.contacted === 1 || r.contacted === 0){ x.filled++; if(r.contacted === 1) x.yes++; }
+    byReason.set(r.reasonIdx, x);
+  });
+  const countsText = (map, label) => {
+    const keys = Object.keys(map).sort((a,b)=>map[b]-map[a] || a-b);
+    return keys.length === 1 ? esc(label(keys[0])) : keys.map(k=>`${esc(label(k))} ${map[k]}`).join(' · ');
+  };
+  const rows = [...byReason.values()].sort((a,b)=>b.n-a.n || a.r.reasonIdx-b.r.reasonIdx).map(x=>`<tr>
+      <td><i class="dm-sw" style="background:${DM_CAT_COLORS[x.r.category]||'#A3AAB5'};margin-right:6px;"></i>${esc(x.r.reason.label)}</td>
+      <td class="num"><b>${x.n}</b></td>
+      <td>${Object.keys(x.days).sort((a,b)=>(+a||9)-(+b||9)).map(k=>`${k!=='0' ? k + '-й' : '?'} — ${x.days[k]}`).join(' · ')}</td>
+      <td>${countsText(x.init, k=>s.initiators[k] || '—')}</td>
+      <td>${x.filled ? (x.yes === x.filled ? 'да' : (x.yes === 0 ? 'нет' : `да ${x.yes} из ${x.filled}`)) : '—'}</td>
+    </tr>`).join('');
+  return `<div class="section-head"><h2>Почему ушли</h2><div class="desc">Форма «Регистрация уволенных» · ${s.total} ${plural(s.total,'запись','записи','записей')}</div></div>
+    ${dmLegendHtml(s, 'category')}
+    ${dmDayBarsHtml(s, 'category')}
+    <div style="overflow-x:auto;margin:12px 0 8px;"><table class="dropout-table">
+      <thead><tr><th>Причина</th><th>Ушло</th><th>В какой день</th><th>Инициатор</th><th>Тренер связывался</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    ${gap ? `<div class="footnote" style="margin-bottom:16px;">${gap}</div>` : '<div style="margin-bottom:16px;"></div>'}`;
 }
 
 /** Автовыводы для руководства — только из посчитанных долей, без оценочных догадок. */

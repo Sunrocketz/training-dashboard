@@ -32,7 +32,7 @@ training-dashboard/
 | Trainers tab | Таблица, сортировка, поиск, detail | Писать в Sheets |
 | Months tab | Карточки месяцев, detail | Менять контракт |
 | Weeks tab | Выбор недели (пн–вс); «Коротко о неделе»; карточки групп со статусом «сегодня» (N-й день / выход / старт скоро); 4 главные цифры к прошлой неделе; в раскрывающемся блоке — воронка (законченные + идущие), таблицы групп и тренеров, тренд 12 нед., список недель (ADR-020) | Считать TQI по неделе; применять фильтр месяца |
-| Dismissals tab | «Уход кандидатов»: KPI, столбики по дням (разбивка причины / инициатор), автовыводы, тепловая таблица причина × день, инициатор по дням, тренеры, месяцы старта, фильтр тренера; блок в обзоре и в карточке тренера (ADR-023) | Раскладывать причины заново (это делает GAS); смешивать с KPI основного листа |
+| Dismissals tab | «Уход кандидатов»: KPI, столбики по дням (разбивка причины / инициатор), автовыводы, тепловая таблица причина × день, инициатор по дням, тренеры, месяцы старта, фильтр тренера; блок в обзоре и в карточке тренера; «Почему ушли» в карточке группы недели и в карточке группы — привязка по тренеру + дате старта (ADR-023) | Раскладывать причины заново (это делает GAS); смешивать с KPI основного листа |
 | Charts | Chart.js lifecycle (`destroyChart`) | Утекать инстансы чартов |
 | Styles | Визуал дашборда | Тянуть тяжёлый UI-kit без ADR |
 
@@ -43,7 +43,7 @@ training-dashboard/
 - `openTrainerDetail` / `openMonthDetail` — сводки из `groups` + отсев + `lineReview`; у тренера переключатель периода (`opts.scopeMonth`)
 - `openGroupDetail` / `groupIndexOf` — карточка одной группы (индекс в `groups[]` как ключ)
 - `validGroupsOf` / `notGatheredGroupsOf` / `isNotGathered` — v8: «не собралась» в `groups[]` только для показа (ADR-021); `groupTypeOf` / `groupTypeTag` — тип группы из комментария
-- `dismissalsPayload` / `dismissalRecords` / `summarizeDismissals` / `dmInsights` / `dmDayBarsHtml` / `dmReasonsListHtml` / `dmHeatTableHtml` / `renderDismissalsTab` / `renderDismissalsOverviewSection` / `renderTrainerDismissalsBlock` / `dismissalsCsvRows` — уход кандидатов из `dismissals` (v10)
+- `dismissalsPayload` / `dismissalRecords` / `summarizeDismissals` / `dmInsights` / `dmDayBarsHtml` / `dmReasonsListHtml` / `dmHeatTableHtml` / `renderDismissalsTab` / `renderDismissalsOverviewSection` / `renderTrainerDismissalsBlock` / `dismissalsCsvRows` — уход кандидатов из `dismissals` (v10); `dmGroupIndex` / `groupDismissals` / `dmGroupGapNote` / `groupDismissalsCardHtml` / `groupDismissalsDetailHtml` — привязка записей к группам (тренер + старт ±3 дня)
 - Все `const` / `let` модульного уровня — в начале `<script>`: `renderAll` из локального кэша запускается до конца разбора скрипта
 - `buildWeeksIndex` / `summarizeWeek` / `weekTrainerRows` / `renderWeeksTab` / `groupTodayState` / `groupCardHtml` / `weekBriefHtml` / `renderWeekFunnel` / `renderWeekTrendChart` — недели из `groups` (старт по `startDate`, итог по `lineDate`)
 
