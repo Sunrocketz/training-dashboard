@@ -2291,6 +2291,8 @@ function groupNumbersHtml(g){
   if(Number(g.day1)) parts.push(`пришли <b>${g.day1}</b>`);
   if(Number(g.day2Start)) parts.push(`2-й день <b>${g.day2Start}</b>`);
   if(Number(g.day3Start)) parts.push(`3-й день <b>${g.day3Start}</b>`);
+  const sf = done ? null : groupSoFar(g);
+  if(sf) parts.push(`сейчас <b>${sf.count}</b> ${soFarBadge(sf)}`);
   if(done) parts.push(`на линии <b>${g.finalCount}</b>${g.conv1to5 != null ? ` <span class="badge ${pctBadgeClass(g.conv1to5)}">${g.conv1to5}%</span>` : ''}`);
   let html = parts.length
     ? `<div class="wk-nums">${parts.join('<span class="wk-sep">→</span>')}</div>`
@@ -2312,6 +2314,20 @@ function groupCardHtml(g, today){
     ${groupNumbersHtml(g)}
     ${groupDismissalsCardHtml(g)}
   </div>`;
+}
+
+/** Идущая группа: предварительная конверсия 1→5 на сегодня — сколько осталось / пришли в 1-й день.
+ *  «Осталось» = меньшее из: последний внесённый день (2/3/4-й) и «пришли − отсеялись» (отсев вносят по ходу дня). */
+function groupSoFar(g){
+  const day1 = Number(g.day1) || 0;
+  if(!day1) return null;
+  const lastDay = [g.day4Start, g.day3Start, g.day2Start].map(Number).find(v => v > 0);
+  const drop = (Number(g.leftSelf)||0) + (Number(g.refused)||0) + (Number(g.transferred)||0);
+  const n = Math.max(0, Math.min(lastDay || day1, day1 - drop));
+  return { count: n, pct: round1(n / day1 * 100) };
+}
+function soFarBadge(sf){
+  return `<span class="badge ${pctBadgeClass(sf.pct)}" title="Осталось ${sf.count} из пришедших в 1-й день (последний внесённый день или «пришли − отсеялись»). Группа ещё учится — процент может снизиться до выхода на линию.">${sf.pct}%</span>`;
 }
 
 /** Индекс группы в dashboardData.groups — ключ для открытия карточки группы (у групп нет id). */
@@ -2356,7 +2372,7 @@ function openGroupDetail(gidx, opts={}){
       ${kpi('На линии', done ? g.finalCount : 'идёт', done ? ofDay1(g.finalCount) : `выход ${ddmm(g.lineDate)}`)}
     </div>
     <div class="mini-kpi-grid cols-3" style="margin-top:-8px;">
-      ${kpi('Конв. 1→5', done ? pctV(g.conv1to5) : '—', `цель ${metrics().planConv1to5}%`)}
+      ${kpi('Конв. 1→5', done ? pctV(g.conv1to5) : (groupSoFar(g) ? pctV(groupSoFar(g).pct) : '—'), done ? `цель ${metrics().planConv1to5}%` : (groupSoFar(g) ? `пока: осталось ${groupSoFar(g).count} · цель ${metrics().planConv1to5}%` : `цель ${metrics().planConv1to5}%`))}
       ${kpi('Конв. 2→5', done ? pctV(g.conv2) : '—')}
       ${kpi('Конв. 3→5', done ? pctV(g.conv3) : '—')}
     </div>
